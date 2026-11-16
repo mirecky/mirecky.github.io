@@ -1,0 +1,386 @@
+<!doctype html>
+<html lang="sk">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#11131a">
+  <meta name="description" content="Osobný zoznam klavírnych skladieb s prehrávaním videonávodov z YouTube.">
+  <title>Môj klavírny repertoár</title>
+  <style>
+    :root { color-scheme: dark; --bg:#0c0f15; --surface:#171b24; --surface2:#202532; --line:#343a49; --text:#f4f1e9; --muted:#b6b8c4; --gold:#e8bd78; --gold2:#8b6635; --danger:#ffa7a4; --round:18px; }
+    * { box-sizing:border-box; }
+    [hidden] { display:none !important; }
+    body { margin:0; font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif; background:radial-gradient(ellipse at 10% 0%,#27202a 0%,transparent 42%),var(--bg); color:var(--text); min-height:100vh; line-height:1.5; }
+    button, input, select, textarea { font:inherit; }
+    button { cursor:pointer; }
+    a { color:var(--gold); }
+    .shell { max-width:1200px; margin:0 auto; padding:28px 22px 64px; }
+    .top { display:flex; gap:20px; align-items:center; justify-content:space-between; margin-bottom:26px; }
+    .eyebrow { color:var(--gold); font-size:12px; font-weight:750; text-transform:uppercase; letter-spacing:.16em; margin:0 0 8px; }
+    h1 { font-size:clamp(30px,5vw,53px); margin:0; letter-spacing:-.045em; line-height:1.12; }
+    .sub { color:var(--muted); margin:12px 0 0; font-size:15px; }
+    .piano-icon { width:90px; height:70px; flex:none; position:relative; display:flex; align-items:flex-end; gap:2px; padding:9px; border:1px solid #55515a; border-radius:12px; background:linear-gradient(145deg,#343443,#171b24); box-shadow:0 14px 45px #0008; }
+    .white-key { flex:1; height:53px; border-radius:0 0 3px 3px; background:linear-gradient(#fffef6,#c8c8ca); }
+    .black-key { position:absolute; top:9px; width:10px; height:32px; background:linear-gradient(#080a0f,#34343d); z-index:1; border-radius:0 0 3px 3px; }
+    .layout { display:grid; grid-template-columns:minmax(0, 1.5fr) minmax(330px, 1fr); gap:22px; align-items:start; }
+    .panel { border:1px solid var(--line); border-radius:var(--round); background:linear-gradient(180deg,#1b1e28,#151923); box-shadow:0 12px 36px #0003; padding:21px; min-width:0; }
+    .panel h2 { font-size:18px; margin:0 0 15px; letter-spacing:-.02em; }
+    .player { background:#07090e; border:1px solid #414250; border-radius:13px; aspect-ratio:16/9; overflow:hidden; position:relative; }
+    .player iframe { width:100%; height:100%; border:0; }
+    .player-external { position:relative; display:flex; align-items:center; justify-content:center; flex-direction:column; gap:14px; width:100%; height:100%; text-align:center; padding:14px; background:#0d111c; overflow:hidden; }
+    .player-external img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; opacity:.36; filter:blur(1px); }
+    .player-external::before { content:""; position:absolute; inset:0; z-index:1; background:linear-gradient(0deg,#080a10e6,#080a1033); }
+    .player-external strong,.player-external a,.player-external p { position:relative; z-index:2; }
+    .player-external strong { font-size:clamp(14px,2.6vw,20px); text-shadow:0 2px 10px #000; }
+    .player-external a { display:inline-flex; align-items:center; justify-content:center; padding:12px 17px; background:#e62117; color:#fff; font-size:15px; font-weight:750; text-decoration:none; border-radius:10px; }
+    .player-external p { max-width:34em; margin:0; font-size:12px; color:#f0eff0; }
+    .local-notice { background:#302821; border:1px solid #82613e; padding:10px 12px; border-radius:9px; color:#f1d7b1; font-size:13px; margin:0 0 14px; }
+    .player-empty { display:flex; align-items:center; justify-content:center; height:100%; flex-direction:column; text-align:center; gap:8px; padding:20px; background:linear-gradient(145deg,#282538,#10151d); }
+    .player-empty .big { font-size:43px; color:var(--gold); }
+    .player-empty p { margin:0; color:var(--muted); }
+    .now { display:flex; align-items:start; justify-content:space-between; gap:12px; margin-top:18px; }
+    .now h3 { font-size:22px; line-height:1.23; margin:0 0 4px; }
+    .now p { margin:0; color:var(--muted); font-size:14px; }
+    .button { border-radius:10px; border:1px solid var(--line); background:var(--surface2); color:var(--text); font-weight:650; font-size:14px; padding:10px 13px; text-decoration:none; display:inline-flex; align-items:center; justify-content:center; gap:7px; white-space:nowrap; }
+    .button:hover { border-color:var(--gold2); filter:brightness(1.09); }
+    .button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline:2px solid var(--gold); outline-offset:2px; }
+    .button.primary { background:var(--gold); color:#26201b; border-color:var(--gold); }
+    .button.minimal { background:transparent; }
+    .button.danger { color:var(--danger); }
+    .button.small { padding:7px 10px; font-size:13px; }
+    .muted { color:var(--muted); }
+    .player-help { margin:12px 0 0; color:var(--muted); font-size:12px; }
+    .right-stack { display:grid; gap:22px; }
+    .yt-search-form, .yt-link-row { display:flex; gap:9px; align-items:stretch; }
+    .yt-search-form input, .yt-link-row input { flex:1; }
+    .yt-help { color:var(--muted); font-size:12px; margin:10px 0 0; }
+    .yt-added-message { color:var(--gold); font-size:13px; margin:8px 0 0; min-height:18px; }
+    .yt-secondary { margin-top:17px; padding-top:14px; border-top:1px solid var(--line); }
+    .yt-secondary label { display:block; font-weight:700; font-size:13px; margin-bottom:6px; }
+    @media(max-width:590px) { .yt-search-form,.yt-link-row { flex-direction:column; } .yt-search-form button,.yt-link-row button { width:100%; } }
+    .toolbar { display:flex; gap:9px; flex-wrap:wrap; margin-bottom:15px; }
+    .search { width:100%; margin-bottom:12px; }
+    input,select,textarea { color:var(--text); background:#10141d; border:1px solid #414655; border-radius:9px; padding:10px 12px; width:100%; min-width:0; }
+    textarea { resize:vertical; min-height:74px; }
+    input::placeholder, textarea::placeholder { color:#8a8d9c; }
+    .filter { background:transparent; border:1px solid var(--line); color:var(--muted); font-size:12px; padding:7px 10px; border-radius:999px; }
+    .filter[aria-pressed="true"] { color:#2a2116; background:var(--gold); border-color:var(--gold); font-weight:750; }
+    .list { display:grid; gap:10px; max-height:650px; overflow:auto; padding-right:2px; }
+    .song { border:1px solid #343949; border-radius:12px; padding:11px; background:#121620; display:grid; grid-template-columns:100px minmax(0,1fr); gap:12px; }
+    .song.active { border-color:var(--gold2); background:#232029; }
+    .thumb { display:block; width:100px; aspect-ratio:16/10; object-fit:cover; border-radius:7px; background:#343643; }
+    .song-title { font-weight:750; font-size:14px; line-height:1.3; margin:0 0 2px; overflow-wrap:anywhere; }
+    .song-author { color:var(--muted); font-size:12px; margin:0 0 8px; }
+    .song-tools { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
+    .song .status { padding:6px 8px; font-size:12px; width:auto; max-width:100%; }
+    .note { font-size:12px; color:var(--muted); margin:8px 0 0; overflow-wrap:anywhere; }
+    .empty { color:var(--muted); text-align:center; padding:24px 8px; }
+    .field { margin-bottom:13px; }
+    .field label { display:block; font-size:13px; font-weight:700; margin-bottom:5px; }
+    .field small { display:block; font-size:12px; color:var(--muted); margin-top:4px; }
+    .form-actions,.backup { display:flex; gap:9px; flex-wrap:wrap; }
+    .backup { border-top:1px solid var(--line); padding-top:16px; margin-top:18px; }
+    .backup-title { color:var(--muted); font-size:12px; font-weight:700; margin-bottom:9px; }
+    .count { color:var(--muted); font-size:13px; margin:0 0 13px; }
+    .message { min-height:22px; margin:8px 0 0; color:var(--gold); font-size:13px; }
+    footer { color:#9fa2b0; text-align:center; font-size:12px; margin-top:28px; }
+    @media(max-width:900px) { .layout { grid-template-columns:1fr; } .right-stack { grid-template-columns:1fr; } .list { max-height:none; } }
+    @media(max-width:550px) { .shell { padding:23px 12px 42px; } .panel { padding:15px; } .top { margin-bottom:22px; } .piano-icon { display:none; } .now { flex-wrap:wrap; } .song { grid-template-columns:84px minmax(0,1fr); } .thumb { width:84px; } }
+  </style>
+</head>
+<body>
+<main class="shell">
+  <header class="top">
+    <div>
+      <p class="eyebrow">Moja hudobná knižnica</p>
+      <h1>Klavírny repertoár</h1>
+      <p class="sub">Skladby, ktoré sa chcem naučiť hrať. Videonávody na jednom mieste.</p>
+    </div>
+    <div class="piano-icon" aria-hidden="true">
+      <span class="white-key"></span><span class="white-key"></span><span class="white-key"></span><span class="white-key"></span><span class="white-key"></span><span class="white-key"></span>
+      <span class="black-key" style="left:20px"></span><span class="black-key" style="left:32px"></span><span class="black-key" style="left:56px"></span><span class="black-key" style="left:68px"></span>
+    </div>
+  </header>
+
+  <div class="layout">
+    <section class="panel" aria-label="Prehrávač">
+      <h2>Prehrávač</h2>
+      <p class="local-notice" id="localNotice" hidden>Stránka je otvorená z telefónu ako lokálny súbor. YouTube tu blokuje vložený prehrávač (chyba 153). Videá preto otvoríš jedným kliknutím na YouTube. Ak stránku umiestnime na HTTPS, video sa môže prehrávať priamo tu.</p>
+      <div class="player" id="player"><div class="player-empty"><span class="big">♫</span><strong>Vyber skladbu zo zoznamu</strong><p>Videonávod sa zobrazí tu.</p></div></div>
+      <div class="now">
+        <div><h3 id="currentTitle">Žiadna skladba</h3><p id="currentArtist">Vyber si skladbu napravo.</p></div>
+        <a class="button small" id="openYoutube" href="https://www.youtube.com/" target="_blank" rel="noopener noreferrer" hidden>Otvoriť na YouTube ↗</a>
+      </div>
+      <p class="player-help" id="playerHelp">Prehrávanie vyžaduje internet. Niektoré videá nepovoľujú vložené prehrávanie; vtedy použi „Otvoriť na YouTube“.</p>
+    </section>
+
+    <div class="right-stack">
+      <section class="panel" aria-label="Vyhľadávanie na YouTube">
+        <h2>Vyhľadávanie na YouTube</h2>
+        <form class="yt-search-form" id="ytSearchForm" action="https://www.youtube.com/results" method="get" target="_blank">
+          <input id="ytSearchQuery" name="search_query" type="search" value="Moonlight Sonata Beethoven piano tutorial" required aria-label="Hľadať videá na YouTube" placeholder="Názov skladby alebo interpreta…">
+          <button class="button primary" type="submit">Hľadať na YouTube ↗</button>
+        </form>
+        <p class="yt-help">Výsledky sa otvoria na YouTube. Vyber video, skopíruj jeho odkaz a vlož ho sem. Ak je stránka otvorená z disku, video sa otvorí na YouTube; na webovej HTTPS stránke sa môže prehrávať priamo tu.</p>
+        <div class="yt-secondary">
+          <label for="foundUrl">Vložiť odkaz na vybrané video</label>
+          <div class="yt-link-row"><input id="foundUrl" type="url" placeholder="https://youtu.be/…" aria-describedby="ytHint"><button class="button" id="useFound" type="button">Použiť video</button></div>
+          <p id="ytHint" class="yt-added-message" role="status" aria-live="polite"></p>
+        </div>
+      </section>
+      <section class="panel" aria-label="Zoznam skladieb">
+        <h2>Moje skladby</h2>
+        <p id="count" class="count"></p>
+        <input class="search" id="search" type="search" placeholder="Hľadať skladbu alebo skladateľa…" aria-label="Vyhľadávanie skladieb">
+        <div class="toolbar" id="filters" aria-label="Filtrovanie skladieb">
+          <button class="filter" data-filter="all" aria-pressed="true" type="button">Všetky</button>
+          <button class="filter" data-filter="want" aria-pressed="false" type="button">Chcem hrať</button>
+          <button class="filter" data-filter="learning" aria-pressed="false" type="button">Učím sa</button>
+          <button class="filter" data-filter="learned" aria-pressed="false" type="button">Zvládnuté</button>
+        </div>
+        <div id="songList" class="list" aria-live="polite"></div>
+      </section>
+
+      <section class="panel" aria-label="Pridanie a úprava skladieb">
+        <h2 id="formTitle">Pridať skladbu</h2>
+        <form id="songForm">
+          <div class="field"><label for="title">Názov skladby *</label><input id="title" name="title" required maxlength="150" placeholder="Napr. Comptine d’un autre été"></div>
+          <div class="field"><label for="artist">Autor / skladateľ</label><input id="artist" name="artist" maxlength="120" placeholder="Napr. Yann Tiersen"></div>
+          <div class="field"><label for="url">Odkaz na YouTube *</label><input id="url" name="url" required type="url" placeholder="https://youtu.be/…"><small>Podporované: youtube.com/watch, youtu.be, shorts, live a embed odkazy.</small></div>
+          <div class="field"><label for="status">Stav učenia</label><select id="status" name="status"><option value="want">Chcem hrať</option><option value="learning">Učím sa</option><option value="learned">Zvládnuté</option></select></div>
+          <div class="field"><label for="notes">Poznámky</label><textarea id="notes" name="notes" maxlength="500" placeholder="Prstoklad, náročnosť, čo precvičiť…"></textarea></div>
+          <div class="form-actions"><button class="button primary" id="save" type="submit">Pridať do zoznamu</button><button class="button minimal" id="cancel" type="button" hidden>Zrušiť úpravu</button></div>
+          <p id="message" class="message" role="status" aria-live="polite"></p>
+        </form>
+        <div class="backup-title">Záloha môjho repertoáru</div>
+        <div class="backup"><button class="button small" id="export" type="button">Exportovať JSON</button><button class="button small" id="import" type="button">Importovať JSON</button><input type="file" id="importFile" accept="application/json,.json" hidden></div>
+      </section>
+    </div>
+  </div>
+  <footer>Skladby sa uchovávajú iba v tomto prehliadači na tomto zariadení. Na prenos alebo zálohu použi export JSON.</footer>
+</main>
+<script>
+(() => {
+  'use strict';
+  const KEY = 'moj-klavirny-repertoar-v2';
+  const OLD_KEY = 'moj-klavirny-repertoar-v1';
+  const LOCAL_FILE = !['https:', 'http:'].includes(location.protocol) || !location.hostname;
+  const MOONLIGHT = { id:'moonlight-sonata-1', title:'Moonlight Sonata – 1. časť (Adagio sostenuto)', artist:'Ludwig van Beethoven', url:'https://www.youtube.com/watch?v=wQuBfKikBq0', videoId:'wQuBfKikBq0', status:'want', notes:'Sonáta č. 14, op. 27 č. 2. Pomalý podrobný klavírny videonávod pre začiatočníkov.' };
+  const STARTER = [
+    { id:'godfather-main-theme', title:'The Godfather – Main Theme', artist:'Nino Rota', url:'https://youtu.be/YdWK3qsDyXA', videoId:'YdWK3qsDyXA', status:'want', notes:'Klavírny videonávod (1. časť).' },
+    MOONLIGHT
+  ];
+  const statuses = {want:'Chcem hrať',learning:'Učím sa',learned:'Zvládnuté'};
+  const $ = id => document.getElementById(id);
+  let songs = load();
+  let selectedId = songs.length ? songs[0].id : null;
+  let filter = 'all';
+  let editingId = null;
+
+  function validId(id) { return /^[A-Za-z0-9_-]{11}$/.test(id); }
+  function videoIdFromUrl(value) {
+    try {
+      const u = new URL(value.trim());
+      const hostname = u.hostname.toLowerCase().replace(/^www\./,'').replace(/^m\./,'');
+      let id = null;
+      if (hostname === 'youtu.be') id = u.pathname.split('/')[1];
+      else if (hostname === 'youtube.com' || hostname === 'youtube-nocookie.com') {
+        if (u.pathname === '/watch') id = u.searchParams.get('v');
+        else if (/^\/(shorts|embed|live)\//.test(u.pathname)) id = u.pathname.split('/')[2];
+      }
+      return validId(id) ? id : null;
+    } catch { return null; }
+  }
+  function cleanSong(s) {
+    if (!s || typeof s !== 'object' || typeof s.title !== 'string' || typeof s.url !== 'string') return null;
+    const videoId = videoIdFromUrl(s.url);
+    if (!videoId || !s.title.trim()) return null;
+    return {
+      id:typeof s.id === 'string' && s.id.length <= 100 ? s.id : newId(),
+      title:s.title.trim().slice(0,150),
+      artist:typeof s.artist === 'string' ? s.artist.trim().slice(0,120) : '',
+      url:'https://www.youtube.com/watch?v=' + videoId,
+      videoId,
+      status:statuses[s.status] ? s.status : 'want',
+      notes:typeof s.notes === 'string' ? s.notes.trim().slice(0,500) : ''
+    };
+  }
+  function newId() { return 'song-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,8); }
+  function load() {
+    try {
+      const raw = localStorage.getItem(KEY);
+      if (raw !== null) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed.map(cleanSong).filter(Boolean);
+      }
+      const legacy = localStorage.getItem(OLD_KEY);
+      if (legacy !== null) {
+        const parsed = JSON.parse(legacy);
+        if (Array.isArray(parsed)) {
+          const migrated = parsed.map(cleanSong).filter(Boolean);
+          if (!migrated.some(x => x.videoId === MOONLIGHT.videoId)) migrated.push(cleanSong(MOONLIGHT));
+          try { localStorage.setItem(KEY, JSON.stringify(migrated)); } catch {}
+          return migrated;
+        }
+      }
+    } catch (err) { console.warn('Uložený zoznam sa nepodarilo načítať.', err); }
+    return STARTER.map(cleanSong).filter(Boolean);
+  }
+  function persist() {
+    try { localStorage.setItem(KEY, JSON.stringify(songs)); }
+    catch { showMessage('Ukladanie do prehliadača nie je dostupné. Urob si export JSON.'); }
+  }
+  function showMessage(text) { $('message').textContent = text; }
+  function playSong(id, userInitiated=false) {
+    const song = songs.find(s => s.id === id);
+    if (!song) return;
+    selectedId = id;
+    const player = $('player');
+    if (LOCAL_FILE) {
+      // A file:// or content:// page cannot reliably identify itself to YouTube.
+      // Show an actionable thumbnail rather than a broken YouTube iframe (error 153).
+      const poster = document.createElement('div'); poster.className = 'player-external';
+      const img = document.createElement('img');
+      img.src = 'https://i.ytimg.com/vi/' + song.videoId + '/hqdefault.jpg';
+      img.alt = ''; img.loading = 'lazy';
+      const title = document.createElement('strong'); title.textContent = song.title;
+      const link = document.createElement('a'); link.href = song.url;
+      link.target = '_blank'; link.rel = 'noopener noreferrer';
+      link.textContent = '▶ Prehrať na YouTube ↗';
+      const note = document.createElement('p');
+      note.textContent = 'Vložený prehrávač funguje spoľahlivejšie na stránke zverejnenej cez HTTPS.';
+      poster.append(img,title,link,note);
+      player.replaceChildren(poster);
+      // This executes directly in the click handler, so browsers permit the new tab.
+      if (userInitiated) window.open(song.url, '_blank', 'noopener,noreferrer');
+    } else {
+      const frame = document.createElement('iframe');
+      frame.src = 'https://www.youtube-nocookie.com/embed/' + encodeURIComponent(song.videoId) + '?rel=0&autoplay=' + (userInitiated ? '1' : '0');
+      frame.title = 'Videonávod: ' + song.title;
+      frame.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share';
+      frame.referrerPolicy = 'strict-origin-when-cross-origin';
+      frame.allowFullscreen = true;
+      player.replaceChildren(frame);
+    }
+    $('currentTitle').textContent = song.title;
+    $('currentArtist').textContent = song.artist || 'Bez uvedeného autora';
+    $('openYoutube').href = song.url;
+    $('openYoutube').hidden = false;
+    renderList();
+  }
+  function makeButton(label, onClick, extra='') {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'button small ' + extra; b.textContent = label; b.addEventListener('click', onClick);
+    return b;
+  }
+  function renderList() {
+    const q = $('search').value.toLocaleLowerCase('sk').trim();
+    const filtered = songs.filter(s => (filter === 'all' || s.status === filter) && (!q || (s.title + ' ' + s.artist + ' ' + s.notes).toLocaleLowerCase('sk').includes(q)));
+    $('count').textContent = songs.length + (songs.length === 1 ? ' skladba v repertoári' : songs.length >= 2 && songs.length <= 4 ? ' skladby v repertoári' : ' skladieb v repertoári');
+    const list = $('songList'); list.replaceChildren();
+    if (!filtered.length) { const p=document.createElement('p'); p.className='empty'; p.textContent='Žiadne skladby podľa aktuálneho filtra.'; list.append(p); return; }
+    for (const song of filtered) {
+      const card=document.createElement('article'); card.className='song'+(selectedId===song.id?' active':'');
+      const thumb=document.createElement('img'); thumb.className='thumb'; thumb.src='https://i.ytimg.com/vi/'+song.videoId+'/hqdefault.jpg'; thumb.alt='Náhľad videa '+song.title; thumb.loading='lazy';
+      const content=document.createElement('div');
+      const title=document.createElement('p');title.className='song-title';title.textContent=song.title;
+      const artist=document.createElement('p');artist.className='song-author';artist.textContent=song.artist||'Bez uvedeného autora';
+      const status=document.createElement('select');status.className='status';status.setAttribute('aria-label','Stav: '+song.title);
+      for (const [value,label] of Object.entries(statuses)) { const opt=document.createElement('option');opt.value=value;opt.textContent=label;status.append(opt); }
+      status.value=song.status;
+      status.addEventListener('change',()=>{song.status=status.value;persist();renderList();});
+      const tools=document.createElement('div');tools.className='song-tools';
+      tools.append(
+        makeButton(LOCAL_FILE ? '▶ YouTube' : '▶ Prehrať',()=>playSong(song.id,true),'primary'),
+        makeButton('Iné návody ↗',()=>searchYoutube(song.title+' '+song.artist+' piano tutorial')),
+        makeButton('Upraviť',()=>editSong(song.id)),
+        makeButton('Odstrániť',()=>removeSong(song.id),'danger')
+      );
+      content.append(title,artist,status,tools);
+      if (song.notes) {const p=document.createElement('p');p.className='note';p.textContent=song.notes;content.append(p);}
+      card.append(thumb,content);list.append(card);
+    }
+  }
+  function editSong(id) {
+    const song=songs.find(s=>s.id===id);if(!song)return;
+    editingId=id;
+    $('title').value=song.title; $('artist').value=song.artist; $('url').value=song.url; $('status').value=song.status; $('notes').value=song.notes;
+    $('formTitle').textContent='Upraviť skladbu';$('save').textContent='Uložiť zmeny';$('cancel').hidden=false;
+    showMessage('Upravuješ: '+song.title);
+    $('songForm').scrollIntoView({behavior:'smooth',block:'center'});
+  }
+  function resetForm() {
+    editingId=null;$('songForm').reset();$('formTitle').textContent='Pridať skladbu';$('save').textContent='Pridať do zoznamu';$('cancel').hidden=true;
+  }
+  function removeSong(id) {
+    const s=songs.find(x=>x.id===id);if(!s)return;
+    if(!confirm('Odstrániť skladbu „'+s.title+'“ zo zoznamu?'))return;
+    songs=songs.filter(x=>x.id!==id);
+    if(editingId===id)resetForm();
+    if(selectedId===id) {selectedId=null;$('player').replaceChildren();$('player').innerHTML='<div class="player-empty"><span class="big">♫</span><strong>Vyber skladbu zo zoznamu</strong></div>';$('currentTitle').textContent='Žiadna skladba';$('currentArtist').textContent='Vyber skladbu zo zoznamu.';$('openYoutube').hidden=true;}
+    persist();renderList();showMessage('Skladba bola odstránená.');
+  }
+  $('songForm').addEventListener('submit', e=>{
+    e.preventDefault();
+    const raw={title:$('title').value,artist:$('artist').value,url:$('url').value,status:$('status').value,notes:$('notes').value,id:editingId||newId()};
+    const s=cleanSong(raw);
+    if(!s) {showMessage('Zadaj názov a platný odkaz na konkrétne YouTube video.');return;}
+    if(songs.some(x=>x.videoId===s.videoId&&x.id!==editingId)) {showMessage('Toto video už v zozname máš.');return;}
+    if(editingId) {const idx=songs.findIndex(x=>x.id===editingId);if(idx<0)return;songs[idx]=s;showMessage('Zmeny boli uložené.');}
+    else {songs.push(s);showMessage('Skladba bola pridaná do zoznamu.');}
+    persist();resetForm();renderList();
+  });
+  function searchYoutube(query) {
+    $('ytSearchQuery').value=query;
+    window.open('https://www.youtube.com/results?search_query='+encodeURIComponent(query),'_blank','noopener,noreferrer');
+  }
+  $('useFound').addEventListener('click',()=>{
+    const raw=$('foundUrl').value;
+    const videoId=videoIdFromUrl(raw);
+    if(!videoId){$('ytHint').textContent='Vlož odkaz na konkrétne YouTube video, nie odkaz na výsledky vyhľadávania.';return;}
+    $('url').value='https://www.youtube.com/watch?v='+videoId;
+    $('foundUrl').value='';
+    $('ytHint').textContent='Odkaz je pripravený. Vyplň názov skladby a ulož ju do zoznamu.';
+    $('songForm').scrollIntoView({behavior:'smooth',block:'start'});
+    $('title').focus({preventScroll:true});
+  });
+  $('cancel').addEventListener('click',()=>{resetForm();showMessage('Úprava zrušená.');});
+  $('search').addEventListener('input',renderList);
+  $('filters').addEventListener('click',e=>{
+    const btn=e.target.closest('button[data-filter]');if(!btn)return;
+    filter=btn.dataset.filter;
+    for(const b of $('filters').querySelectorAll('button'))b.setAttribute('aria-pressed',String(b===btn));
+    renderList();
+  });
+  $('export').addEventListener('click',()=>{
+    const data=JSON.stringify({format:'klavirny-repertoar',version:1,exportedAt:new Date().toISOString(),songs},null,2);
+    const blob=new Blob([data],{type:'application/json;charset=utf-8'});
+    const href=URL.createObjectURL(blob);const a=document.createElement('a');a.href=href;a.download='klavirny-repertoar.json';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(href),1000);
+    showMessage('Záloha bola pripravená na stiahnutie.');
+  });
+  $('import').addEventListener('click',()=>$('importFile').click());
+  $('importFile').addEventListener('change',async e=>{
+    const file=e.target.files?.[0];if(!file)return;
+    try {
+      if(file.size>2_000_000)throw Error('Súbor je príliš veľký.');
+      const parsed=JSON.parse(await file.text());const input=Array.isArray(parsed)?parsed:parsed?.format==='klavirny-repertoar'?parsed.songs:null;
+      if(!Array.isArray(input))throw Error('Nesprávny formát zálohy.');
+      if(input.length>500)throw Error('Záloha obsahuje príliš veľa skladieb.');
+      const incoming=input.map(cleanSong);
+      if(incoming.some(x=>!x))throw Error('Niektoré záznamy nemajú platný názov alebo odkaz.');
+      const unique=new Set(incoming.map(x=>x.videoId));if(unique.size!==incoming.length)throw Error('Záloha obsahuje duplicitné videá.');
+      if(!confirm('Import nahradí aktuálny zoznam '+songs.length+' skladieb zoznamom '+incoming.length+' skladieb. Pokračovať?'))return;
+      songs=incoming;selectedId=null;resetForm();persist();
+      $('player').replaceChildren();$('currentTitle').textContent='Vyber skladbu';$('currentArtist').textContent='Import dokončený.';$('openYoutube').hidden=true;
+      renderList();showMessage('Import dokončený: '+songs.length+' skladieb.');
+    } catch(err) {showMessage('Import sa nepodaril: '+err.message);}
+    finally {e.target.value='';}
+  });
+  $('localNotice').hidden = !LOCAL_FILE;
+  if (LOCAL_FILE) $('playerHelp').textContent = 'Na lokálne otvorenej HTML stránke sa videá z bezpečnostných dôvodov otvárajú na YouTube. Zoznam a poznámky môžeš spravovať aj bez zverejnenia stránky.';
+  if (selectedId) playSong(selectedId);
+  else renderList();
+})();
+</script>
+</body>
+</html>
