@@ -3,6 +3,7 @@
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/13.4.0/firebase-app.js';
 import { getAuth, GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut } from 'https://www.gstatic.com/firebasejs/13.4.0/firebase-auth.js';
 import { getFirestore, collection, doc, onSnapshot, setDoc, deleteDoc, writeBatch, runTransaction } from 'https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js';
+import { initializeAppCheck, ReCaptchaEnterpriseProvider } from 'https://www.gstatic.com/firebasejs/13.4.0/firebase-app-check.js';
 
 const firebaseConfig = {
   apiKey: 'AIzaSyA_dnstUaHkzu87jkpjfhd2PE8gfytIbEs',
@@ -14,6 +15,18 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
+// Verejny reCAPTCHA Enterprise SITE KEY (nie je tajny Gemini API kluc).
+// App Check je registrovany pre mirecky.github.io; na Firestore nic nevynucujeme.
+if (location.protocol === 'https:' && location.hostname === 'mirecky.github.io') {
+  try {
+    initializeAppCheck(app, {
+      provider: new ReCaptchaEnterpriseProvider('6LdyviQuAAAAABu-SgM5rQmQvDuS73vo7uKz7ou-'),
+      isTokenAutoRefreshEnabled: true
+    });
+  } catch (err) {
+    console.warn('App Check sa nepodarilo inicializovat:', err);
+  }
+}
 const auth = getAuth(app);
 const db = getFirestore(app);
 const ui = window.repertoireApp;
