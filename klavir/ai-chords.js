@@ -15,6 +15,19 @@ let busy=false;
 let draft=null;
 const roots=new Set(['C','C#','D','Eb','E','F','F#','G','Ab','A','Bb','B']);
 const nameOf=root=>String(root||'').replace(/#/g,'♯').replace(/b/g,'♭');
+const friendlyModel=name=>name==='gemini-3.8-flash'?'Gemini 3.8 Flash':name==='gemini-3.5-flash-lite'?'Gemini 3.5 Flash-Lite':name;
+function temporaryFailure(error){
+  const message=String(error?.message||'');
+  const code=Number(message.match(/\b(500|503)\b/)?.[1]||0);
+  const reason=/high demand|spikes in demand/i.test(message)
+    ? 'Dočasne vysoký dopyt / preťažená kapacita modelu'
+    : /service unavailable/i.test(message)||code===503
+    ? 'Služba modelu bola dočasne nedostupná'
+    : /temporar(?:ily|y)|overload/i.test(message)
+    ? 'Dočasné preťaženie modelu'
+    : 'Dočasná serverová chyba modelu';
+  return {code,reason};
+}
 function inform(message,level='info'){
   status.textContent=message;
   status.dataset.state=level;
@@ -59,10 +72,19 @@ function showDraft(result,song){
   const notice=document.createElement('p');
   const certainty={low:'nízka',medium:'stredná',high:'vyššia'}[result.confidence];
   notice.textContent='Odhad AI · istota: '+certainty+'. '+result.comment;
+  const modelInfo=document.createElement('p');
+  modelInfo.textContent='Použitý model: '+friendlyModel(result.analysisModel||'neznámy');
+  const failInfo=document.createElement('p');
+  failInfo.className='theory-ai-fallback';
+  failInfo.textContent=result.fallbackInfo
+    ? 'Prečo záložný model? '+friendlyModel(result.fallbackInfo.primary)+
+      ' vrátil '+(result.fallbackInfo.code?'HTTP '+result.fallbackInfo.code+' – ':'')+
+      result.fallbackInfo.reason+'. Preto sa požiadavka zopakovala cez '+friendlyModel(result.analysisModel)+'.'
+    : 'Hlavný model odpovedal bez prepnutia na záložný.';
   const warning=document.createElement('p');
   warning.textContent='Toto nie je overený notový rozbor. AI môže akordy pomýliť; porovnaj ich s nahrávkou alebo notami.';
   warning.className='theory-warning';
-  draftInfo.append(title,list,notice,warning);
+  draftInfo.append(title,list,notice,modelInfo,failInfo,warning);
   save.hidden=!result.analysisChords;
   draftBox.hidden=false;
 }
@@ -99,10 +121,15 @@ button?.addEventListener('click',async()=>{
     // Only retry a genuine temporary capacity error. Never auto-retry
     // quota, authentication, permission or invalid-request errors.
     const models=['gemini-3.8-flash','gemini-3.5-flash-lite'];
-    let result,usedModel=models[0];
+    let result,usedModel=models[0],fallbackInfo=null;
     for(let attempt=0;attempt<models.length;attempt++){
       usedModel=models[attempt];
-      if(attempt>0)inform('Hlavný model je dočasne preťažený. Skúšam záložný Gemini Flash-Lite (najviac 2 požiadavky spolu)…','warn');
+      if(attempt>0)inform(
+        'Hlavný model '+friendlyModel(models[0])+' vrátil '+
+        (fallbackInfo?.code?'HTTP '+fallbackInfo.code+' – ':'')+
+        (fallbackInfo?.reason||'dočasnú chybu')+'. Skúšam záložný '+friendlyModel(usedModel)+'…',
+        'warn'
+      );
       const model=getGenerativeModel(ai,{
         model:usedModel,
         generationConfig:{maxOutputTokens:1400,responseMimeType:'application/json'}
@@ -114,9 +141,12 @@ button?.addEventListener('click',async()=>{
         const message=String(error?.message||'');
         const transient=/\b(?:500|503)\b|high demand|temporar(?:ily|y)|overload|service unavailable/i.test(message);
         if(!transient||attempt===models.length-1)throw error;
+        fallbackInfo={primary:usedModel,...temporaryFailure(error)};
       }
     }
     const proposed=parseResponse(result.response.text());
+    proposed.analysisModel=usedModel;
+    proposed.fallbackInfo=fallbackInfo;
     if(usedModel!==models[0]){
       proposed.comment=('Záložný model Flash-Lite: '+(proposed.comment||'Výsledok treba starostlivo overiť.')).slice(0,220);
       proposed.confidence='low';
@@ -164,7 +194,10 @@ save?.addEventListener('click',async()=>{
     await ui.saveAIAnalysis({
       id:draft.id,videoId:draft.videoId,
       keyRoot:draft.keyRoot,keyMode:draft.keyMode,
-      analysisChords:draft.analysisChords,analysisSource:'ai'
+      analysisChords:draft.analysisChords,analysisSource:'ai',
+      analysisModel:draft.analysisModel,
+      analysisFallbackCode:draft.fallbackInfo?.code||0,
+      analysisFallbackReason:draft.fallbackInfo?.reason||''
     });
     clearDraft();
     inform('Zoznam akordov bol uložený do Firebase ako AI odhad.'+(keyWasKnown?'':' Tóninu si môžeš doplniť neskôr.'),'saved');
