@@ -444,6 +444,11 @@
           <div id="theoryUnknown" class="theory-empty" hidden>
             Tónina aranžmánu zatiaľ nie je známa. Otvor „Upraviť“ a v časti „Hudobný rozbor“ ju nastav. Z názvu ani YouTube odkazu ju nemožno spoľahlivo zistiť.
             <button id="theoryEdit" class="button small" type="button" style="margin-top:11px">Nastaviť tóninu</button>
+            <div id="theoryUnknownChords" class="theory-step" style="margin-top:12px" hidden>
+              <h4>Akordy skladby – tónina zatiaľ neurčená</h4>
+              <p id="theoryUnknownWarning">Zoznam je odhad AI. Over ho podľa videa alebo notového zápisu.</p>
+              <div id="theoryUnknownChordList"></div>
+            </div>
           </div>
           <div id="theoryKnown" hidden>
             <div class="theory-step">
@@ -809,7 +814,25 @@
     $('theoryChords').replaceChildren();
     $('theoryChosen').textContent='';
     $('theoryActual').replaceChildren();
-    if(!known)return;
+    const unknownChords=$('theoryUnknownChords');
+    const unknownList=$('theoryUnknownChordList');
+    unknownList.replaceChildren();
+    const savedActual=song?.analysisChords?.trim()||'';
+    unknownChords.hidden=known||!savedActual;
+    if(!known){
+      if(savedActual) {
+        savedActual.split(',').map(x=>x.trim()).filter(Boolean).forEach(chord=>{
+          const span=document.createElement('span');
+          span.className='theory-pill';
+          span.textContent=unicodeNotes(chord);
+          unknownList.append(span);
+        });
+        $('theoryUnknownWarning').textContent=song.analysisSource==='ai'
+          ? 'AI odhad: pri tomto aranžmáne zatiaľ nemáme overenú tóninu. Akordy si porovnaj s notami alebo nahrávkou.'
+          : 'Akordy zadané pri skladbe; tónina ešte nebola určená.';
+      }
+      return;
+    }
     const notes=spelledScale(root,mode);
     for(const note of notes) {
       const span=document.createElement('span');
@@ -1270,8 +1293,10 @@
       if(cloudMode!=='online')throw Error('Cloud nie je pripojený.');
       const song=songs.find(s=>s.id===proposal.id);
       if(!song||song.videoId!==proposal.videoId)throw Error('Skladba alebo video sa zmenilo.');
+      // Unknown AI tonality never erases an already confirmed key.
       const next=cleanSong({...song,
-        keyRoot:proposal.keyRoot,keyMode:proposal.keyMode,
+        keyRoot:proposal.keyRoot||song.keyRoot||'',
+        keyMode:proposal.keyMode||song.keyMode||'',
         analysisChords:proposal.analysisChords,analysisSource:'ai'
       });
       await window.cloudSync.save(next);
@@ -1289,6 +1314,6 @@
 </script>
 <script src="./video-metadata.js?v=3" defer></script>
 <script type="module" src="./cloud-sync.js?v=3"></script>
-<script type="module" src="./ai-chords.js?v=1"></script>
+<script type="module" src="./ai-chords.js?v=2"></script>
 </body>
 </html>
