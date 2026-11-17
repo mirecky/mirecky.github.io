@@ -220,6 +220,16 @@
     .pinned-list .song .song-tools {margin-top:6px;gap:5px;align-items:center;}
     .pinned-list .song .song-tools .button {font-size:11px;}
     .pin-hint {font-size:12px;color:var(--muted);padding:14px;border:1px dashed var(--line);border-radius:10px;margin:0;}
+    .pin-order-tools {display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin-top:7px;}
+    .pin-order-grip {padding:5px 9px;border-radius:7px;border:1px dashed #746447;color:#f3d8a6;background:#312b26;cursor:grab;user-select:none;touch-action:none;font-size:12px;font-weight:650;}
+    .pin-order-grip:active {cursor:grabbing;}
+    .pin-order-arrow {background:#252b38;border:1px solid #4b5364;color:#f4f1e9;border-radius:7px;min-width:29px;min-height:27px;cursor:pointer;font-size:14px;}
+    .pin-order-arrow:disabled {opacity:.3;cursor:default;}
+    .pin-order-grip:focus-visible,.pin-order-arrow:focus-visible {outline:2px solid var(--gold);outline-offset:2px;}
+    .pinned-list .song.dragging {opacity:.48;}
+    .pinned-list .song.drag-target {outline:2px dashed var(--gold);outline-offset:2px;background:#2d2730;}
+    .pin-order-hint {font-size:11px;color:var(--muted);margin:-5px 0 9px;}
+    .pin-order-grip.is-busy {opacity:.55;cursor:wait;}
     .library-heading {padding-top:13px;border-top:1px solid var(--line);}
     .sort-row {display:flex;align-items:center;justify-content:space-between;gap:9px;margin:4px 0 9px;}
     .sort-row label {color:var(--muted);font-size:11px;}
@@ -668,6 +678,8 @@
   let filter = 'all';
   let sortBy = 'recent';
   let editingId = null;
+  let draggingPinnedId = null;
+  let savingPinnedOrder = false;
   document.body.dataset.mobileTab='player';
   let cloudMode = 'local'; // local, loading, online, error
 
@@ -773,6 +785,7 @@
       status:statuses[s.status] ? s.status : 'want',
       startSeconds:normalizeStartSeconds(s.startSeconds),
       pinned:typeof s.pinned==='boolean' ? s.pinned : (videoId==='YdWK3qsDyXA'||videoId==='wQuBfKikBq0'),
+      pinnedOrder:Number.isInteger(s.pinnedOrder)&&s.pinnedOrder>=0&&s.pinnedOrder<10000?s.pinnedOrder:null,
       addedAt:Number.isSafeInteger(s.addedAt)&&s.addedAt>=0 ? s.addedAt : 0,
       keyRoot, keyMode,
       analysisChords:typeof s.analysisChords==='string'?s.analysisChords.trim().slice(0,300):'',
@@ -1169,12 +1182,66 @@
     renderList();
     libraryMessage(successText);
   }
+  function sortedPinned() {
+    const pinned=songs.filter(s=>s.pinned);
+    if(pinned.every(s=>Number.isInteger(s.pinnedOrder))) {
+      return [...pinned].sort((a,b)=>a.pinnedOrder-b.pinnedOrder||
+        (b.addedAt-a.addedAt)||collator.compare(a.title,b.title));
+    }
+    // Existing data from before manual ordering: keep the original order.
+    return sortSongs(pinned);
+  }
+  async function movePinned(sourceId,targetId) {
+    if(savingPinnedOrder||sourceId===targetId)return;
+    const original=sortedPinned();
+    const from=original.findIndex(s=>s.id===sourceId);
+    const to=original.findIndex(s=>s.id===targetId);
+    if(from<0||to<0)return;
+    const moved=[...original];
+    const [item]=moved.splice(from,1);
+    moved.splice(to,0,item);
+    const orderIds=moved.map(s=>s.id);
+    if(cloudMode==='online'){
+      savingPinnedOrder=true;
+      try{
+        await window.cloudSync.savePinnedOrder(orderIds);
+        libraryMessage('Poradie skladieb bolo uložené v cloude.');
+      }catch(error){
+        libraryMessage('Poradie sa nepodarilo uložiť: '+error.message);
+        renderList();
+      }finally{savingPinnedOrder=false;}
+      return;
+    }
+    if(cloudMode!=='local'){
+      libraryMessage('Cloud sa ešte načítava. Poradie zatiaľ nemožno zmeniť.');
+      return;
+    }
+    moved.forEach((song,index)=>{
+      const current=songs.find(s=>s.id===song.id);
+      if(current)current.pinnedOrder=index;
+    });
+    persist();renderList();
+    libraryMessage('Poradie pripnutých skladieb bolo uložené.');
+  }
+  function movePinnedByOffset(songId,step) {
+    const ordered=sortedPinned();
+    const index=ordered.findIndex(s=>s.id===songId);
+    const next=index+step;
+    if(index<0||next<0||next>=ordered.length)return;
+    movePinned(songId,ordered[next].id);
+  }
   function togglePin(song) {
-    if(!song.pinned && songs.filter(s=>s.pinned).length>=MAX_PINNED) {
+    if(savingPinnedOrder){libraryMessage('Práve sa ukladá poradie skladieb.');return;}
+    const pinned=sortedPinned();
+    if(!song.pinned && pinned.length>=MAX_PINNED) {
       libraryMessage('Môžeš pripnúť najviac 3 skladby. Najprv jednu odopni.');
       return;
     }
-    updateSong(song,{pinned:!song.pinned},song.pinned?'Skladba bola presunutá do knižnice.':'Skladba je pripnutá medzi aktuálne cvičené.');
+    const newOrder=!song.pinned && pinned.every(s=>Number.isInteger(s.pinnedOrder))
+      ? (pinned.length?Math.max(...pinned.map(s=>s.pinnedOrder))+1:0)
+      : null;
+    updateSong(song,{pinned:!song.pinned,pinnedOrder:newOrder},
+      song.pinned?'Skladba bola presunutá do knižnice.':'Skladba je pripnutá medzi aktuálne cvičené.');
   }
   function pinButton(song) {
     const button=document.createElement('button');
@@ -1210,6 +1277,22 @@
   function renderPinnedCard(song) {
     const card=document.createElement('article');
     card.className='song'+(selectedId===song.id?' active':'');
+    card.dataset.songId=song.id;
+    card.addEventListener('dragover',event=>{
+      if(!draggingPinnedId||draggingPinnedId===song.id||savingPinnedOrder)return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect='move';
+      card.classList.add('drag-target');
+    });
+    card.addEventListener('dragleave',event=>{
+      if(!card.contains(event.relatedTarget))card.classList.remove('drag-target');
+    });
+    card.addEventListener('drop',event=>{
+      event.preventDefault();card.classList.remove('drag-target');
+      const id=draggingPinnedId;
+      draggingPinnedId=null;
+      if(id&&id!==song.id)movePinned(id,song.id);
+    });
     const thumbnail=document.createElement('img');
     thumbnail.className='thumb';
     thumbnail.src='https://i.ytimg.com/vi/'+song.videoId+'/hqdefault.jpg';
@@ -1241,7 +1324,47 @@
       pinButton(song),
       more
     );
-    content.append(title,artist,statusSelector(song),tools);
+    const pinnedAll=sortedPinned();
+    const pinIndex=pinnedAll.findIndex(s=>s.id===song.id);
+    const reordering=document.createElement('div');
+    reordering.className='pin-order-tools';
+    const grip=document.createElement('span');
+    grip.className='pin-order-grip';
+    grip.draggable=true;
+    grip.tabIndex=0;
+    grip.setAttribute('role','button');
+    grip.setAttribute('aria-label','Presunúť skladbu '+song.title+' potiahnutím myšou alebo šípkami');
+    grip.textContent='⠿ Presunúť';
+    grip.title='Chyť a presuň na miesto inej pripnutej skladby';
+    grip.addEventListener('dragstart',event=>{
+      if(savingPinnedOrder){event.preventDefault();return;}
+      draggingPinnedId=song.id;
+      event.dataTransfer.effectAllowed='move';
+      event.dataTransfer.setData('text/plain',song.id);
+      card.classList.add('dragging');
+    });
+    grip.addEventListener('dragend',()=>{
+      draggingPinnedId=null;card.classList.remove('dragging');
+      document.querySelectorAll('.pinned-list .drag-target').forEach(el=>el.classList.remove('drag-target'));
+    });
+    grip.addEventListener('keydown',event=>{
+      if(event.key==='ArrowUp'||event.key==='ArrowDown'){
+        event.preventDefault();
+        movePinnedByOffset(song.id,event.key==='ArrowUp'?-1:1);
+      }
+    });
+    function shiftButton(direction,label,textContent){
+      const control=document.createElement('button');
+      control.type='button';control.className='pin-order-arrow';
+      control.textContent=textContent;
+      control.title=label+' skladbu '+song.title;
+      control.setAttribute('aria-label',control.title);
+      control.disabled=pinIndex<0 || (direction<0?pinIndex===0:pinIndex===pinnedAll.length-1);
+      control.addEventListener('click',()=>movePinnedByOffset(song.id,direction));
+      return control;
+    }
+    reordering.append(grip,shiftButton(-1,'Posunúť vyššie','↑'),shiftButton(1,'Posunúť nižšie','↓'));
+    content.append(title,artist,statusSelector(song),tools,reordering);
     card.append(thumbnailButton,content);
     return card;
   }
@@ -1268,9 +1391,10 @@
       (!q||(s.title+' '+s.artist+' '+s.notes).toLocaleLowerCase('sk').includes(q))
     );
     $('count').textContent=songs.length===1?'1 skladba':songs.length>=2&&songs.length<=4?songs.length+' skladby':songs.length+' skladieb';
-    const pinned=songs.filter(s=>s.pinned).slice(0,MAX_PINNED);
+    const pinned=sortedPinned().slice(0,MAX_PINNED);
     const pinnedSet=new Set(pinned.map(s=>s.id));
-    const visiblePinned=sortSongs(filtered.filter(s=>pinnedSet.has(s.id)));
+    const filteredIds=new Set(filtered.map(s=>s.id));
+    const visiblePinned=pinned.filter(s=>filteredIds.has(s.id));
     const visibleRest=sortSongs(filtered.filter(s=>!pinnedSet.has(s.id)));
     const pinnedList=$('pinnedList');pinnedList.replaceChildren();
     if(visiblePinned.length) visiblePinned.forEach(s=>pinnedList.append(renderPinnedCard(s)));
@@ -1323,7 +1447,7 @@
   $('songForm').addEventListener('submit', async e=>{
     e.preventDefault();
     const previous=editingId?songs.find(x=>x.id===editingId):null;
-    const raw={title:$('title').value,artist:$('artist').value,url:$('url').value,status:$('status').value,startSeconds:$('startSeconds').value,sheetAnalysis:previous?.sheetAnalysis||null,musicXmlAnalysis:previous?.musicXmlAnalysis||null,analysisSource:previous?.analysisChords===$('analysisChords').value.trim()&&previous?.videoId===videoIdFromUrl($('url').value)?previous?.analysisSource:'',analysisModel:previous?.analysisChords===$('analysisChords').value.trim()&&previous?.videoId===videoIdFromUrl($('url').value)?previous?.analysisModel:'',analysisFallbackCode:previous?.analysisChords===$('analysisChords').value.trim()&&previous?.videoId===videoIdFromUrl($('url').value)?previous?.analysisFallbackCode:0,analysisFallbackReason:previous?.analysisChords===$('analysisChords').value.trim()&&previous?.videoId===videoIdFromUrl($('url').value)?previous?.analysisFallbackReason:'',notes:$('notes').value,scoreUrl:$('scoreUrl').value,scorePreviewUrl:$('scorePreviewUrl').value,scoreSource:$('scoreSourceInput').value,keyRoot:$('keyRoot').value,keyMode:$('keyMode').value,analysisChords:$('analysisChords').value,pinned:previous?.pinned??false,addedAt:previous?.addedAt??Date.now(),id:editingId||newId()};
+    const raw={title:$('title').value,artist:$('artist').value,url:$('url').value,status:$('status').value,startSeconds:$('startSeconds').value,pinnedOrder:previous?.pinnedOrder??null,sheetAnalysis:previous?.sheetAnalysis||null,musicXmlAnalysis:previous?.musicXmlAnalysis||null,analysisSource:previous?.analysisChords===$('analysisChords').value.trim()&&previous?.videoId===videoIdFromUrl($('url').value)?previous?.analysisSource:'',analysisModel:previous?.analysisChords===$('analysisChords').value.trim()&&previous?.videoId===videoIdFromUrl($('url').value)?previous?.analysisModel:'',analysisFallbackCode:previous?.analysisChords===$('analysisChords').value.trim()&&previous?.videoId===videoIdFromUrl($('url').value)?previous?.analysisFallbackCode:0,analysisFallbackReason:previous?.analysisChords===$('analysisChords').value.trim()&&previous?.videoId===videoIdFromUrl($('url').value)?previous?.analysisFallbackReason:'',notes:$('notes').value,scoreUrl:$('scoreUrl').value,scorePreviewUrl:$('scorePreviewUrl').value,scoreSource:$('scoreSourceInput').value,keyRoot:$('keyRoot').value,keyMode:$('keyMode').value,analysisChords:$('analysisChords').value,pinned:previous?.pinned??false,addedAt:previous?.addedAt??Date.now(),id:editingId||newId()};
     const s=cleanSong(raw);
     if(!s) {showMessage('Zadaj názov a platný odkaz na konkrétne YouTube video.');return;}
     if(songs.some(x=>x.videoId===s.videoId&&x.id!==editingId)) {showMessage('Toto video už v zozname máš.');return;}
@@ -1532,7 +1656,7 @@
 })();
 </script>
 <script src="./video-metadata.js?v=3" defer></script>
-<script type="module" src="./cloud-sync.js?v=3"></script>
+<script type="module" src="./cloud-sync.js?v=4"></script>
 <script type="module" src="./ai-chords.js?v=4"></script>
 <script type="module" src="./sheet-verify.js?v=2"></script>
 <script src="./musicxml-analyzer.js?v=1" defer></script>
