@@ -27,17 +27,20 @@ function clearDraft(){
 function parseResponse(source){
   const obj=JSON.parse(String(source||'').trim());
   if(!obj||typeof obj!=='object')throw Error('Gemini nevrátil správny výsledok.');
-  const root=typeof obj.keyRoot==='string'?obj.keyRoot.trim():'';
-  const mode=typeof obj.keyMode==='string'?obj.keyMode.trim():'';
-  if(!roots.has(root)||!['major','minor'].includes(mode))
-    throw Error('Nepodarilo sa spoľahlivo určiť tóninu. Skús inú skladbu alebo doplň tóninu ručne.');
+  const rawRoot=typeof obj.keyRoot==='string'?obj.keyRoot.trim().replace(/♯/g,'#').replace(/♭/g,'b'):'';
+  const rawMode=typeof obj.keyMode==='string'?obj.keyMode.trim().toLowerCase():'';
+  // Tónina je nepovinná: Gemini môže rozpoznať akordy bez jednoznačnej tóniny.
+  const keyKnown=roots.has(rawRoot)&&['major','minor'].includes(rawMode);
+  const root=keyKnown?rawRoot:'';
+  const mode=keyKnown?rawMode:'';
   const candidates=Array.isArray(obj.chords)?obj.chords:[];
   const normalized=[...new Set(candidates
     .filter(x=>typeof x==='string')
     .map(x=>x.trim().replace(/♯/g,'#').replace(/♭/g,'b'))
     .filter(x=>x.length>0&&x.length<=20&&/^[A-G][#b]?(?:m|maj|min|dim|aug|sus|add|M)?[0-9+#b°ø()/a-zA-Z-]*$/.test(x))
   )].slice(0,24);
-  if(!normalized.length)throw Error('Model nedokázal určiť konkrétne akordy. Neuložili sme žiadny odhad.');
+  // Neznáme akordy nie sú zlyhaním API – model môže z videa zistiť len časť informácií.
+  // Taký výsledok sa smie zobraziť, ale bez akordov neponúkame uloženie.
   const explanation=typeof obj.comment==='string'?obj.comment.slice(0,220).trim():'';
   const confidence=['low','medium','high'].includes(obj.confidence)?obj.confidence:'low';
   return {keyRoot:root,keyMode:mode,analysisChords:normalized.join(', '),confidence,comment:explanation};
@@ -46,16 +49,21 @@ function showDraft(result,song){
   clearDraft();
   draft={...result,id:song.id,videoId:song.videoId};
   const title=document.createElement('strong');
-  title.textContent='Návrh: '+nameOf(result.keyRoot)+(result.keyMode==='minor'?' mol':' dur');
+  title.textContent=result.keyRoot
+    ? 'Návrh tóniny: '+nameOf(result.keyRoot)+(result.keyMode==='minor'?' mol':' dur')
+    : 'Tóninu sa nepodarilo spoľahlivo určiť';
   const list=document.createElement('p');
-  list.textContent='Akordy: '+result.analysisChords.replace(/#/g,'♯');
+  list.textContent=result.analysisChords
+    ? 'Rozpoznané akordy (AI odhad): '+result.analysisChords.replace(/#/g,'♯')
+    : 'Akordy sa z tohto videa nepodarilo spoľahlivo rozpoznať.';
   const notice=document.createElement('p');
   const certainty={low:'nízka',medium:'stredná',high:'vyššia'}[result.confidence];
   notice.textContent='Odhad AI · istota: '+certainty+'. '+result.comment;
   const warning=document.createElement('p');
-  warning.textContent='AI môže akordy pomýliť. Porovnaj ich s nahrávkou alebo notami pred uložením.';
+  warning.textContent='Toto nie je overený notový rozbor. AI môže akordy pomýliť; porovnaj ich s nahrávkou alebo notami.';
   warning.className='theory-warning';
   draftInfo.append(title,list,notice,warning);
+  save.hidden=!result.analysisChords;
   draftBox.hidden=false;
 }
 button?.addEventListener('click',async()=>{
@@ -99,17 +107,23 @@ button?.addEventListener('click',async()=>{
       return;
     }
     showDraft(proposed,song);
-    inform('Návrh je pripravený. Skontroluj ho a až potom ho ulož.','saved');
+    if(!proposed.analysisChords){
+      inform('Gemini odpovedalo, ale nerozpoznalo akordy. Nič sa neuložilo. Môžeš použiť notový zápis alebo iný videonávod.','warn');
+    }else if(!proposed.keyRoot){
+      inform('Akordy sú navrhnuté, ale tónina zostáva neurčená. Môžeš potvrdiť iba zoznam akordov.','warn');
+    }else{
+      inform('Návrh je pripravený. Skontroluj ho a až potom ho ulož.','saved');
+    }
   }catch(error){
     console.warn('AI chord analysis failed:',error);
-    inform('Analýza sa nepodarila: '+(error?.message||'Neznáma chyba AI Logic')+'. Môže ísť o nedostupný model, obmedzenie kvóty alebo ochranu App Check.','error');
+    inform('Technická chyba analýzy: '+(error?.message||'Neznáma chyba pri spracovaní odpovede')+'. Žiadne údaje sa neuložili.','error');
   }finally{
     busy=false;
     button.disabled=false;
   }
 });
 save?.addEventListener('click',async()=>{
-  if(!draft||busy)return;
+  if(!draft?.analysisChords||busy)return;
   if(!ui.isCloudReady()){inform('Cloud nie je pripravený.','error');return;}
   const current=ui.getSelectedSong();
   if(current?.id!==draft.id||current?.videoId!==draft.videoId){
@@ -119,13 +133,14 @@ save?.addEventListener('click',async()=>{
   }
   busy=true;save.disabled=true;
   try{
+    const keyWasKnown=Boolean(draft.keyRoot);
     await ui.saveAIAnalysis({
       id:draft.id,videoId:draft.videoId,
       keyRoot:draft.keyRoot,keyMode:draft.keyMode,
       analysisChords:draft.analysisChords,analysisSource:'ai'
     });
     clearDraft();
-    inform('Návrh akordov je uložený do Firebase a označený ako AI odhad.','saved');
+    inform('Zoznam akordov bol uložený do Firebase ako AI odhad.'+(keyWasKnown?'':' Tóninu si môžeš doplniť neskôr.'),'saved');
   }catch(error){
     inform('Uloženie sa nepodarilo: '+(error?.message||'Chyba cloudu'),'error');
   }finally{
