@@ -49,6 +49,13 @@
     .button.small { padding:7px 10px; font-size:13px; }
     .muted { color:var(--muted); }
     .player-help { margin:12px 0 0; color:var(--muted); font-size:12px; }
+    .delete-confirm-dialog {max-width:min(480px,calc(100vw - 32px));width:100%;}
+    .delete-confirm-body {padding:20px;}
+    .delete-confirm-body p {margin:0 0 13px;line-height:1.55;overflow-wrap:anywhere;}
+    .delete-confirm-warning {color:var(--muted);font-size:13px;}
+    .delete-confirm-actions {display:flex;flex-wrap:wrap;gap:10px;justify-content:flex-end;margin-top:20px;}
+    .delete-confirm-actions .danger {background:#602b32;color:#fff;border-color:#a64c57;}
+    .delete-confirm-actions .danger:hover {background:#79363f;}
     .origin-panel { margin:19px 0 0; padding:16px; border:1px solid #434353; border-radius:13px; background:#1b1e28; }
     .origin-heading { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:10px; }
     .origin-heading h3 { margin:0; font-size:17px; letter-spacing:-.01em; }
@@ -648,6 +655,19 @@
           <p id="ytHint" class="yt-added-message" role="status" aria-live="polite"></p>
         </div>
       </section>
+  </dialog>
+  <dialog class="action-dialog delete-confirm-dialog" id="deleteDialog" aria-labelledby="deleteDialogTitle" aria-describedby="deleteDialogInfo">
+    <div class="dialog-heading">
+      <h2 id="deleteDialogTitle">Odstrániť skladbu?</h2>
+    </div>
+    <div class="delete-confirm-body">
+      <p id="deleteDialogInfo"></p>
+      <p class="delete-confirm-warning">Odstráni sa iba vybraný videonávod vrátane jeho notových odkazov, rozborov a poznámok. Ostatné náročnosti rovnakej skladby zostanú zachované.</p>
+      <form method="dialog" class="delete-confirm-actions">
+        <button class="button" type="submit" value="cancel" autofocus>Zrušiť</button>
+        <button class="button danger" id="deleteDialogConfirm" type="submit" value="confirm">Natrvalo odstrániť</button>
+      </form>
+    </div>
   </dialog>
   <dialog class="action-dialog" id="addDialog" aria-label="Pridať alebo upraviť skladbu">
     <div class="dialog-heading"><h2 id="dialogTitle">Pridať skladbu</h2><button class="dialog-close" type="button" data-close-dialog="addDialog" aria-label="Zatvoriť">✕</button></div>
@@ -1782,10 +1802,29 @@
     levelEditedManually=false;
     editingId=null;$('songForm').reset();syncStartControls(0);$('formTitle').textContent='Pridať skladbu';$('dialogTitle').textContent='Pridať skladbu';$('save').textContent='Pridať do zoznamu';$('cancel').hidden=true;$('advancedFields').open=false;
   }
+  let deleteDialogBusy=false;
+  async function confirmRemoveSong(song) {
+    const dialog=$('deleteDialog');
+    $('deleteDialogInfo').textContent='Naozaj odstrániť „'+(song.workGroup||song.title)+'“'+
+      (song.difficulty?' – '+DIFFICULTIES[song.difficulty]:'')+'?';
+    // A native HTML dialog does not rely on browser-suppressible confirm().
+    dialog.returnValue='cancel';
+    return new Promise(resolve=>{
+      dialog.addEventListener('close',()=>resolve(dialog.returnValue==='confirm'),{once:true});
+      dialog.showModal();
+    });
+  }
   async function removeSong(id) {
     const s=songs.find(x=>x.id===id);if(!s)return;
+    if(deleteDialogBusy)return;
     if(cloudMode!=='local' && cloudMode!=='online') {showMessage('Cloud ešte nie je pripravený.');return;}
-    if(!confirm('Odstrániť skladbu „'+s.title+'“ zo zoznamu?'))return;
+    deleteDialogBusy=true;
+    let confirmed=false;
+    try {confirmed=await confirmRemoveSong(s);}
+    finally {deleteDialogBusy=false;}
+    if(!confirmed)return;
+    if(!songs.some(x=>x.id===id))return;
+    if(cloudMode!=='local' && cloudMode!=='online') {showMessage('Cloud už nie je pripravený. Odstránenie sa nevykonalo.');return;}
     if(cloudMode==='online') {
       try {await window.cloudSync.remove(id);if(editingId===id)resetForm();showMessage('Skladba bola odstránená z cloudu.');}
       catch(err) {showMessage('Nepodarilo sa odstrániť skladbu: '+err.message);}
