@@ -332,6 +332,10 @@
     .theory-sheet-proposal-actions {display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;}
     .theory-sheet-saved {padding:12px;background:#1b2724;border:1px solid #3b6050;border-radius:10px;}
     .theory-sheet-saved p {font-size:12px;line-height:1.55;color:var(--muted);margin:6px 0;}
+    .theory-sheet-pages {display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);column-gap:12px;row-gap:4px;margin-top:10px;}
+    .theory-sheet-pages label {margin:8px 0 2px!important;font-size:12px;}
+    .theory-sheet-pages input,.theory-sheet-pages select {width:100%;background:#141922;color:inherit;border:1px solid #465365;border-radius:8px;padding:9px;font-size:14px;}
+    @media(max-width:480px){.theory-sheet-pages{grid-template-columns:1fr;}}
     .theory-musicxml-panel {border:1px solid #40566b;border-radius:11px;padding:12px;background:#18212b;}
     .theory-musicxml-panel p {font-size:12px;line-height:1.55;color:var(--muted);margin:7px 0;}
     #theoryMusicXmlTools {margin-top:12px;padding-top:12px;border-top:1px solid #344657;}
@@ -479,7 +483,18 @@
               <a id="theorySheetSourceLink" class="button small" target="_blank" rel="noopener noreferrer" hidden>Otvoriť bezplatné PDF nôt ↗</a>
               <label for="theorySheetFile">Alebo vyber kompletné PDF nôt</label>
               <input id="theorySheetFile" type="file" accept=".pdf,application/pdf" aria-describedby="theorySheetLimit">
-              <p id="theorySheetLimit">Limit 12 MB. Dokument sa odošle na spracovanie Gemini, ale samotné PDF sa neuloží do Firebase.</p>
+              <p id="theorySheetLimit">Limit 12 MB. Pred analýzou sa v prehliadači vyberú zvolené strany; iba tento výsek sa odošle do Gemini. PDF sa neuloží do Firebase.</p>
+              <div class="theory-sheet-pages">
+                <label for="theorySheetStartPage">Začať od strany PDF</label>
+                <input id="theorySheetStartPage" type="number" min="1" max="999" value="1" step="1" inputmode="numeric">
+                <label for="theorySheetPageCount">Analyzovať počet strán</label>
+                <select id="theorySheetPageCount">
+                  <option value="1">1 stranu</option>
+                  <option value="2" selected>2 strany (odporúčané)</option>
+                  <option value="4">4 strany</option>
+                </select>
+              </div>
+              <p id="theorySheetScope">Východiskovo sa analyzujú iba prvé 2 strany PDF, nie celá skladba. Takto obmedzíme veľkosť požiadavky a riziko prekročenia časového limitu.</p>
               <button id="theorySheetRun" class="button primary small" type="button">Analyzovať notový zápis</button>
               <p id="theorySheetStatus" role="status" aria-live="polite"></p>
               <div id="theorySheetProposal" class="theory-sheet-proposal" hidden>
@@ -728,7 +743,11 @@
       confidence:['low','medium','high'].includes(rawSheet.confidence)?rawSheet.confidence:'low',
       model:typeof rawSheet.model==='string'?rawSheet.model.slice(0,65):'',
       comment:typeof rawSheet.comment==='string'?rawSheet.comment.slice(0,250):'',
-      analyzedAt:Number.isSafeInteger(rawSheet.analyzedAt)?rawSheet.analyzedAt:0
+      analyzedAt:Number.isSafeInteger(rawSheet.analyzedAt)?rawSheet.analyzedAt:0,
+      scopeStart:Number.isSafeInteger(rawSheet.scopeStart)?Math.max(1,rawSheet.scopeStart):0,
+      scopeEnd:Number.isSafeInteger(rawSheet.scopeEnd)?Math.max(1,rawSheet.scopeEnd):0,
+      scopeTotal:Number.isSafeInteger(rawSheet.scopeTotal)?Math.max(1,rawSheet.scopeTotal):0,
+      scopeComplete:rawSheet.scopeComplete===true
     } : null;
     const rawXml=s.musicXmlAnalysis && typeof s.musicXmlAnalysis==='object' && !Array.isArray(s.musicXmlAnalysis)
       ? s.musicXmlAnalysis : null;
@@ -926,7 +945,11 @@
       'Podľa PDF (AI návrh): '+saved.chords.replace(/#/g,'♯')+
       (saved.keyRoot?' · Tónina: '+saved.keyRoot.replace(/#/g,'♯')+' '+(saved.keyMode==='minor'?'mol':'dur'):' · Tónina neurčená')+
       '. Zdroj: '+(saved.sourceType==='linked'?'priradené bezplatné PDF':'ručne vybrané PDF')+
-      (saved.model?' · Model: '+saved.model:'')+'.';
+      (saved.model?' · Model: '+saved.model:'')+
+      (saved.scopeStart && saved.scopeEnd && saved.scopeTotal
+        ?' · Rozsah: '+saved.scopeStart+'–'+saved.scopeEnd+' z '+saved.scopeTotal+' strán'
+        :' · Rozsah strán nebol zaznamenaný')+
+      (saved.scopeComplete?' · celý dokument':'; iba časť dokumentu')+'.';
     const displayedSongChords=String(song.analysisChords||'').split(',').map(x=>x.trim()).filter(Boolean);
     const savedChords=saved.chords.split(',').map(x=>x.trim()).filter(Boolean);
     const normalizeChord=x=>x.toLowerCase().replace(/\s/g,'');
@@ -1511,7 +1534,7 @@
 <script src="./video-metadata.js?v=3" defer></script>
 <script type="module" src="./cloud-sync.js?v=3"></script>
 <script type="module" src="./ai-chords.js?v=4"></script>
-<script type="module" src="./sheet-verify.js?v=1"></script>
+<script type="module" src="./sheet-verify.js?v=2"></script>
 <script src="./musicxml-analyzer.js?v=1" defer></script>
 </body>
 </html>
