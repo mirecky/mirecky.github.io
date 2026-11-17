@@ -210,6 +210,56 @@
       .dialog-content {padding:14px;}
       .dialog-heading {padding:12px 14px;}
     }
+
+    /* Rozšírená knižnica: tri pripnuté skladby a úsporný zoznam. */
+    .mobile-tabs {display:none;}
+    .pinned-section {margin:0 0 19px;}
+    .section-heading {display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin:4px 0 10px;}
+    .section-heading h3 {font-size:14px;margin:0;letter-spacing:-.01em;}
+    .section-heading span {font-size:11px;color:var(--muted);}
+    .pinned-list {display:grid;gap:8px;}
+    .pinned-list .song {grid-template-columns:78px minmax(0,1fr);gap:10px;padding:10px;}
+    .pinned-list .song.active {border-color:var(--gold2);}
+    .pinned-list .song .song-tools {margin-top:6px;gap:5px;align-items:center;}
+    .pinned-list .song .song-tools .button {font-size:11px;}
+    .pin-hint {font-size:12px;color:var(--muted);padding:14px;border:1px dashed var(--line);border-radius:10px;margin:0;}
+    .library-heading {padding-top:13px;border-top:1px solid var(--line);}
+    .sort-row {display:flex;align-items:center;justify-content:space-between;gap:9px;margin:4px 0 9px;}
+    .sort-row label {color:var(--muted);font-size:11px;}
+    .sort-row select {width:auto;max-width:70%;font-size:11px;padding:5px 25px 5px 9px;border-radius:8px;}
+    .compact-list {max-height:min(47vh,485px);min-height:0;overflow-y:auto;gap:0;border:1px solid var(--line);border-radius:10px;background:#111620;}
+    .song-row {display:flex;align-items:center;gap:5px;padding:6px 9px;min-height:44px;border-bottom:1px solid #2b313d;}
+    .song-row:last-child {border-bottom:0;}
+    .song-row.active {background:#25212c;}
+    .song-row:hover {background:#202633;}
+    .song-row-title {min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left;background:transparent;color:var(--text);border:0;font-size:12px;padding:4px;cursor:pointer;}
+    .song-row-title:hover {color:var(--gold);}
+    .song-row .row-play {border:0;background:transparent;color:var(--gold);font-size:17px;padding:4px 7px;flex:none;}
+    .pin-toggle {flex:none;border:1px solid #3a4050;border-radius:8px;background:#1c2430;color:#d7d7df;font-size:17px;line-height:1;padding:7px 9px;cursor:pointer;}
+    .pin-toggle.pinned {color:var(--gold);border-color:#9d793e;background:#30271d;}
+    .pin-toggle:hover {border-color:var(--gold);}
+    .pin-toggle:disabled {opacity:.45;cursor:not-allowed;}
+    .library-feedback {min-height:14px;font-size:12px;color:var(--gold);margin:8px 0 0;}
+    .viewer-actions {display:flex;align-items:center;justify-content:flex-end;gap:6px;flex-wrap:wrap;}
+    .viewer-actions .button {font-size:12px;padding:6px 9px;}
+    .viewer-panel {position:sticky;top:12px;}
+    .library-panel {min-width:0;}
+    .compact-list .empty {padding:15px 9px;font-size:12px;}
+    @media(max-width:920px) {
+      .mobile-tabs {display:flex;gap:5px;padding:4px;border:1px solid var(--line);border-radius:11px;background:#151923;margin:0 0 13px;}
+      .mobile-tab {flex:1;border:0;border-radius:8px;padding:10px 8px;background:transparent;color:var(--muted);cursor:pointer;font-size:13px;font-weight:650;}
+      .mobile-tab[aria-pressed="true"] {color:#241b12;background:var(--gold);}
+      .viewer-panel {position:static;}
+      body[data-mobile-tab="player"] .library-panel {display:none;}
+      body[data-mobile-tab="library"] .viewer-panel {display:none;}
+      .compact-list {max-height:min(54vh,530px);}
+    }
+    @media(max-width:550px) {
+      .pinned-list .song {grid-template-columns:70px minmax(0,1fr);}
+      .pinned-list .thumb {width:70px;}
+      .viewer-actions {justify-content:flex-start;}
+      .song-row {padding:7px 6px;}
+    }
   </style>
 </head>
 <body>
@@ -245,10 +295,18 @@
       <button id="openAddSong" class="button primary small" type="button">＋ Pridať skladbu</button>
     </div>
   </div>
+  <nav class="mobile-tabs" aria-label="Mobilné zobrazenie">
+    <button id="mobileShowPlayer" class="mobile-tab" type="button" aria-pressed="true">▶ Prehrávač</button>
+    <button id="mobileShowLibrary" class="mobile-tab" type="button" aria-pressed="false">♫ Skladby</button>
+  </nav>
   <div class="layout">
     <section class="panel library-panel" aria-label="Zoznam skladieb">
-        <h2>Moje skladby <span id="count" class="count"></span></h2>
-
+        <h2>Môj repertoár <span id="count" class="count"></span></h2>
+        <section class="pinned-section" aria-label="Aktuálne cvičím">
+          <div class="section-heading"><h3>Aktuálne cvičím</h3><span>max. 3 skladby</span></div>
+          <div id="pinnedList" class="pinned-list" aria-live="polite"></div>
+        </section>
+        <div class="section-heading library-heading"><h3>Ostatné skladby</h3><span id="libraryCount"></span></div>
         <input class="search" id="search" type="search" placeholder="Hľadať skladbu alebo skladateľa…" aria-label="Vyhľadávanie skladieb">
         <div class="toolbar" id="filters" aria-label="Filtrovanie skladieb">
           <button class="filter" data-filter="all" aria-pressed="true" type="button">Všetky</button>
@@ -256,7 +314,17 @@
           <button class="filter" data-filter="learning" aria-pressed="false" type="button">Učím sa</button>
           <button class="filter" data-filter="learned" aria-pressed="false" type="button">Zvládnuté</button>
         </div>
-        <div id="songList" class="list" aria-live="polite"></div>
+        <div class="sort-row">
+          <label for="sortSongs">Triedenie</label>
+          <select id="sortSongs" aria-label="Triedenie skladieb">
+            <option value="recent">Najnovšie pridané</option>
+            <option value="title">Podľa názvu</option>
+            <option value="artist">Podľa skladateľa</option>
+            <option value="status">Podľa stavu učenia</option>
+          </select>
+        </div>
+        <div id="songList" class="list compact-list" aria-live="polite"></div>
+        <p id="libraryFeedback" class="library-feedback" role="status" aria-live="polite"></p>
       </section>
     <section class="panel viewer-panel" aria-label="Prehrávač">
       <h2>Prehrávač <span class="view-label">Video a notový zápis</span></h2>
@@ -264,7 +332,11 @@
       <div class="player" id="player"><div class="player-empty"><span class="big">♫</span><strong>Vyber skladbu zo zoznamu</strong><p>Videonávod sa zobrazí tu.</p></div></div>
       <div class="now">
         <div><h3 id="currentTitle">Žiadna skladba</h3><p id="currentArtist">Vyber si skladbu napravo.</p></div>
-        <a class="button small" id="openYoutube" href="https://www.youtube.com/" target="_blank" rel="noopener noreferrer" hidden>Otvoriť na YouTube ↗</a>
+        <div class="viewer-actions">
+          <a class="button small" id="openYoutube" href="https://www.youtube.com/" target="_blank" rel="noopener noreferrer" hidden>Otvoriť na YouTube ↗</a>
+          <button class="button small" id="currentEdit" type="button" hidden>Upraviť</button>
+          <button class="button small danger" id="currentRemove" type="button" hidden>Odstrániť</button>
+        </div>
       </div>
       <p class="player-help" id="playerHelp">Prehrávanie vyžaduje internet. Niektoré videá nepovoľujú vložené prehrávanie; vtedy použi „Otvoriť na YouTube“.</p>
       <section class="score-panel" id="scorePanel" aria-label="Notový zápis">
@@ -344,11 +416,15 @@
     MOONLIGHT
   ];
   const statuses = {want:'Chcem hrať',learning:'Učím sa',learned:'Zvládnuté'};
+  const MAX_PINNED=3;
+  const collator=new Intl.Collator('sk',{sensitivity:'base',numeric:true});
   const $ = id => document.getElementById(id);
   let songs = load();
   let selectedId = songs.length ? songs[0].id : null;
   let filter = 'all';
+  let sortBy = 'recent';
   let editingId = null;
+  document.body.dataset.mobileTab='player';
   let cloudMode = 'local'; // local, loading, online, error
 
   function validId(id) { return /^[A-Za-z0-9_-]{11}$/.test(id); }
@@ -381,6 +457,8 @@
       url:'https://www.youtube.com/watch?v=' + videoId,
       videoId,
       status:statuses[s.status] ? s.status : 'want',
+      pinned:typeof s.pinned==='boolean' ? s.pinned : (videoId==='YdWK3qsDyXA'||videoId==='wQuBfKikBq0'),
+      addedAt:Number.isSafeInteger(s.addedAt)&&s.addedAt>=0 ? s.addedAt : 0,
       notes:typeof s.notes === 'string' ? s.notes.trim().slice(0,500) : '',
       scoreUrl:scoreLink(s.scoreUrl)||(videoId==='wQuBfKikBq0'?MOONLIGHT_SCORE:''),
       scorePreviewUrl:scoreLink(s.scorePreviewUrl)||(videoId==='YdWK3qsDyXA'?GODFATHER_PREVIEW:''),
@@ -413,6 +491,14 @@
     catch { showMessage('Ukladanie do prehliadača nie je dostupné. Urob si export JSON.'); }
   }
   function showMessage(text) { $('message').textContent = text; }
+  function setMobileTab(tab) {
+    const next=tab==='library'?'library':'player';
+    document.body.dataset.mobileTab=next;
+    $('mobileShowPlayer').setAttribute('aria-pressed',String(next==='player'));
+    $('mobileShowLibrary').setAttribute('aria-pressed',String(next==='library'));
+  }
+  $('mobileShowPlayer').addEventListener('click',()=>setMobileTab('player'));
+  $('mobileShowLibrary').addEventListener('click',()=>setMobileTab('library'));
   function playSong(id, userInitiated=false) {
     const song = songs.find(s => s.id === id);
     if (!song) return;
@@ -448,10 +534,13 @@
     $('currentArtist').textContent = song.artist || 'Bez uvedeného autora';
     $('openYoutube').href = song.url;
     $('openYoutube').hidden = false;
+    $('currentEdit').hidden=false;
+    $('currentRemove').hidden=false;
     renderScore(song);
     renderList();
-    if(userInitiated && matchMedia('(max-width:920px)').matches && document.visibilityState==='visible') {
-      $('player').scrollIntoView({behavior:'smooth',block:'center'});
+    if(userInitiated && matchMedia('(max-width:920px)').matches) {
+      setMobileTab('player');
+      if(document.visibilityState==='visible') $('player').scrollIntoView({behavior:'smooth',block:'start'});
     }
   }
   function renderScore(song) {
@@ -499,59 +588,157 @@
     b.type = 'button'; b.className = 'button small ' + extra; b.textContent = label; b.addEventListener('click', onClick);
     return b;
   }
+  function libraryMessage(message) {
+    $('libraryFeedback').textContent=message;
+    showMessage(message);
+  }
+  function sortSongs(items) {
+    const list=[...items];
+    list.sort((a,b)=>{
+      if(sortBy==='title') return collator.compare(a.title,b.title);
+      if(sortBy==='artist') return collator.compare(a.artist,b.artist)||collator.compare(a.title,b.title);
+      if(sortBy==='status') {
+        const order={learning:0,want:1,learned:2};
+        return (order[a.status]-order[b.status])||collator.compare(a.title,b.title);
+      }
+      return (b.addedAt-a.addedAt)||collator.compare(a.title,b.title);
+    });
+    return list;
+  }
+  async function updateSong(song,fields,successText='Zmena bola uložená.') {
+    const next={...song,...fields};
+    if(cloudMode==='online') {
+      try {
+        await window.cloudSync.save(next);
+        libraryMessage(successText);
+      } catch(error) {libraryMessage('Uloženie sa nepodarilo: '+error.message);renderList();}
+      return;
+    }
+    if(cloudMode!=='local') {libraryMessage('Cloud sa načítava alebo je nedostupný.');return;}
+    const idx=songs.findIndex(s=>s.id===song.id);
+    if(idx<0) return;
+    songs[idx]=cleanSong(next);
+    persist();
+    renderList();
+    libraryMessage(successText);
+  }
+  function togglePin(song) {
+    if(!song.pinned && songs.filter(s=>s.pinned).length>=MAX_PINNED) {
+      libraryMessage('Môžeš pripnúť najviac 3 skladby. Najprv jednu odopni.');
+      return;
+    }
+    updateSong(song,{pinned:!song.pinned},song.pinned?'Skladba bola presunutá do knižnice.':'Skladba je pripnutá medzi aktuálne cvičené.');
+  }
+  function pinButton(song) {
+    const button=document.createElement('button');
+    button.type='button';
+    button.className='pin-toggle'+(song.pinned?' pinned':'');
+    button.textContent=song.pinned?'★':'☆';
+    button.title=song.pinned?'Odopnúť skladbu':'Pripnúť medzi tri skladby';
+    button.setAttribute('aria-label',button.title+': '+song.title);
+    button.setAttribute('aria-pressed',String(song.pinned));
+    button.addEventListener('click',()=>togglePin(song));
+    return button;
+  }
+  function statusSelector(song) {
+    const select=document.createElement('select');
+    select.className='status';
+    select.setAttribute('aria-label','Stav učenia: '+song.title);
+    for(const [value,label] of Object.entries(statuses)) {
+      const option=document.createElement('option');
+      option.value=value;option.textContent=label;select.append(option);
+    }
+    select.value=song.status;
+    select.addEventListener('change',()=>{
+      updateSong(song,{status:select.value},'Stav učenia bol uložený.');
+    });
+    return select;
+  }
+  function openSongScore(song) {
+    if(!song.scoreUrl&&!song.scorePreviewUrl){searchScore(song);return;}
+    playSong(song.id,false);
+    if(matchMedia('(max-width:920px)').matches) setMobileTab('player');
+    requestAnimationFrame(()=>$('scorePanel').scrollIntoView({behavior:'smooth',block:'start'}));
+  }
+  function renderPinnedCard(song) {
+    const card=document.createElement('article');
+    card.className='song'+(selectedId===song.id?' active':'');
+    const thumbnail=document.createElement('img');
+    thumbnail.className='thumb';
+    thumbnail.src='https://i.ytimg.com/vi/'+song.videoId+'/hqdefault.jpg';
+    thumbnail.alt='';thumbnail.loading='lazy';
+    const thumbnailButton=document.createElement('button');
+    thumbnailButton.type='button';thumbnailButton.className='song-image-button';
+    thumbnailButton.setAttribute('aria-label','Prehrať '+song.title);
+    thumbnailButton.append(thumbnail);
+    thumbnailButton.addEventListener('click',()=>playSong(song.id,true));
+    const content=document.createElement('div');
+    const title=document.createElement('button');
+    title.type='button';title.className='song-title-button';title.textContent=song.title;
+    title.addEventListener('click',()=>playSong(song.id,true));
+    const artist=document.createElement('p');artist.className='song-author';artist.textContent=song.artist||'Bez uvedeného autora';
+    const tools=document.createElement('div');tools.className='song-tools';
+    const more=document.createElement('details');more.className='song-more';
+    const summary=document.createElement('summary');summary.textContent='⋯';
+    summary.setAttribute('aria-label','Ďalšie možnosti pre '+song.title);
+    const menu=document.createElement('div');menu.className='song-menu';
+    menu.append(
+      makeButton('Iné návody',()=>searchYoutube(song.title+' '+song.artist+' piano tutorial')),
+      makeButton('Upraviť',()=>editSong(song.id)),
+      makeButton('Odstrániť',()=>removeSong(song.id),'danger')
+    );
+    more.append(summary,menu);
+    tools.append(
+      makeButton('▶ Prehrať',()=>playSong(song.id,true),'primary'),
+      makeButton(song.scoreUrl?'♫ Noty':song.scorePreviewUrl?'♫ Náhľad':'♫ Hľadať',()=>openSongScore(song)),
+      pinButton(song),
+      more
+    );
+    content.append(title,artist,statusSelector(song),tools);
+    card.append(thumbnailButton,content);
+    return card;
+  }
+  function renderCompactRow(song) {
+    const row=document.createElement('div');
+    row.className='song-row'+(selectedId===song.id?' active':'');
+    const title=document.createElement('button');
+    title.type='button';title.className='song-row-title';
+    title.textContent=song.title;title.title=song.title+' · '+(song.artist||'Neznámy skladateľ');
+    title.setAttribute('aria-label','Prehrať '+song.title);
+    title.addEventListener('click',()=>playSong(song.id,true));
+    const play=document.createElement('button');
+    play.type='button';play.className='row-play';
+    play.textContent='▶';play.title='Prehrať '+song.title;
+    play.setAttribute('aria-label',play.title);
+    play.addEventListener('click',()=>playSong(song.id,true));
+    row.append(title,pinButton(song),play);
+    return row;
+  }
   function renderList() {
-    const q = $('search').value.toLocaleLowerCase('sk').trim();
-    const filtered = songs.filter(s => (filter === 'all' || s.status === filter) && (!q || (s.title + ' ' + s.artist + ' ' + s.notes).toLocaleLowerCase('sk').includes(q)));
-    $('count').textContent = songs.length + (songs.length === 1 ? ' skladba v repertoári' : songs.length >= 2 && songs.length <= 4 ? ' skladby v repertoári' : ' skladieb v repertoári');
-    const list = $('songList'); list.replaceChildren();
-    if (!filtered.length) { const p=document.createElement('p'); p.className='empty'; p.textContent='Žiadne skladby podľa aktuálneho filtra.'; list.append(p); return; }
-    for (const song of filtered) {
-      const card=document.createElement('article'); card.className='song'+(selectedId===song.id?' active':'');
-      const thumb=document.createElement('img'); thumb.className='thumb'; thumb.src='https://i.ytimg.com/vi/'+song.videoId+'/hqdefault.jpg'; thumb.alt='Náhľad videa '+song.title; thumb.loading='lazy';
-      const content=document.createElement('div');
-      const title=document.createElement('p');title.className='song-title';title.textContent=song.title;
-      const artist=document.createElement('p');artist.className='song-author';artist.textContent=song.artist||'Bez uvedeného autora';
-      const status=document.createElement('select');status.className='status';status.setAttribute('aria-label','Stav: '+song.title);
-      for (const [value,label] of Object.entries(statuses)) { const opt=document.createElement('option');opt.value=value;opt.textContent=label;status.append(opt); }
-      status.value=song.status;
-      status.addEventListener('change', async () => {
-        if(cloudMode === 'online') {
-          try {await window.cloudSync.save({...song,status:status.value});showMessage('Stav uložený v cloude.');}
-          catch(err) {showMessage('Nepodarilo sa uložiť stav: '+err.message);renderList();}
-          return;
-        }
-        if(cloudMode !== 'local') {showMessage('Cloud sa ešte načítava alebo je nedostupný.');renderList();return;}
-        song.status=status.value;persist();renderList();
-      });
-      const playSelected=()=>playSong(song.id,true);
-      const imageButton=document.createElement('button');
-      imageButton.type='button';imageButton.className='song-image-button';imageButton.setAttribute('aria-label','Prehrať '+song.title);
-      imageButton.append(thumb);imageButton.addEventListener('click',playSelected);
-      const titleButton=document.createElement('button');
-      titleButton.type='button';titleButton.className='song-title-button';titleButton.textContent=song.title;
-      titleButton.addEventListener('click',playSelected);
-      const tools=document.createElement('div');tools.className='song-tools';
-      const more=document.createElement('details');more.className='song-more';
-      const summary=document.createElement('summary');summary.textContent='⋯';summary.setAttribute('aria-label','Ďalšie možnosti: '+song.title);
-      const menu=document.createElement('div');menu.className='song-menu';
-      menu.append(
-        makeButton('Iné návody ↗',()=>searchYoutube(song.title+' '+song.artist+' piano tutorial')),
-        makeButton('Upraviť',()=>editSong(song.id)),
-        makeButton('Odstrániť',()=>removeSong(song.id),'danger')
-      );
-      more.append(summary,menu);
-      tools.append(
-        makeButton(LOCAL_FILE?'▶ YouTube':'▶ Prehrať',playSelected,'primary'),
-        makeButton(song.scoreUrl?'♫ Noty':song.scorePreviewUrl?'♫ Náhľad':'♫ Hľadať',()=>{
-          if(!song.scoreUrl&&!song.scorePreviewUrl){searchScore(song);return;}
-          playSong(song.id);
-          $('scorePanel').scrollIntoView({behavior:'smooth',block:'start'});
-        }),
-        more
-      );
-      content.append(titleButton,artist,status,tools);
-      if(song.notes) {const p=document.createElement('p');p.className='note';p.textContent=song.notes;content.append(p);}
-      card.append(imageButton,content);list.append(card);
+    const q=$('search').value.toLocaleLowerCase('sk').trim();
+    const filtered=songs.filter(s=>
+      (filter==='all'||s.status===filter)&&
+      (!q||(s.title+' '+s.artist+' '+s.notes).toLocaleLowerCase('sk').includes(q))
+    );
+    $('count').textContent=songs.length===1?'1 skladba':songs.length>=2&&songs.length<=4?songs.length+' skladby':songs.length+' skladieb';
+    const pinned=songs.filter(s=>s.pinned).slice(0,MAX_PINNED);
+    const pinnedSet=new Set(pinned.map(s=>s.id));
+    const visiblePinned=sortSongs(filtered.filter(s=>pinnedSet.has(s.id)));
+    const visibleRest=sortSongs(filtered.filter(s=>!pinnedSet.has(s.id)));
+    const pinnedList=$('pinnedList');pinnedList.replaceChildren();
+    if(visiblePinned.length) visiblePinned.forEach(s=>pinnedList.append(renderPinnedCard(s)));
+    else {
+      const p=document.createElement('p');p.className='pin-hint';
+      p.textContent=pinned.length?'Žiadna pripnutá skladba nevyhovuje filtru.':'Pripni si hviezdičkou najviac tri skladby, ktoré aktuálne cvičíš.';
+      pinnedList.append(p);
+    }
+    $('libraryCount').textContent=visibleRest.length+(visibleRest.length===1?' skladba':' skladieb');
+    const list=$('songList');list.replaceChildren();
+    if(visibleRest.length) visibleRest.forEach(s=>list.append(renderCompactRow(s)));
+    else {
+      const p=document.createElement('p');p.className='empty';
+      p.textContent=filtered.length?'Všetky zobrazené skladby sú pripnuté vyššie.':'Žiadne skladby nevyhovujú vyhľadávaniu.';
+      list.append(p);
     }
   }
   function editSong(id) {
@@ -579,12 +766,13 @@
     }
     songs=songs.filter(x=>x.id!==id);
     if(editingId===id)resetForm();
-    if(selectedId===id) {selectedId=null;$('player').replaceChildren();$('player').innerHTML='<div class="player-empty"><span class="big">♫</span><strong>Vyber skladbu zo zoznamu</strong></div>';$('currentTitle').textContent='Žiadna skladba';$('currentArtist').textContent='Vyber skladbu zo zoznamu.';$('openYoutube').hidden=true;renderScore(null);}
+    if(selectedId===id) {selectedId=null;clearPlayer();}
     persist();renderList();showMessage('Skladba bola odstránená.');
   }
   $('songForm').addEventListener('submit', async e=>{
     e.preventDefault();
-    const raw={title:$('title').value,artist:$('artist').value,url:$('url').value,status:$('status').value,notes:$('notes').value,scoreUrl:$('scoreUrl').value,scorePreviewUrl:$('scorePreviewUrl').value,scoreSource:$('scoreSourceInput').value,id:editingId||newId()};
+    const previous=editingId?songs.find(x=>x.id===editingId):null;
+    const raw={title:$('title').value,artist:$('artist').value,url:$('url').value,status:$('status').value,notes:$('notes').value,scoreUrl:$('scoreUrl').value,scorePreviewUrl:$('scorePreviewUrl').value,scoreSource:$('scoreSourceInput').value,pinned:previous?.pinned??false,addedAt:previous?.addedAt??Date.now(),id:editingId||newId()};
     const s=cleanSong(raw);
     if(!s) {showMessage('Zadaj názov a platný odkaz na konkrétne YouTube video.');return;}
     if(songs.some(x=>x.videoId===s.videoId&&x.id!==editingId)) {showMessage('Toto video už v zozname máš.');return;}
@@ -639,6 +827,9 @@
     });
   }
   $('search').addEventListener('input',renderList);
+  $('sortSongs').addEventListener('change',event=>{sortBy=event.target.value;renderList();});
+  $('currentEdit').addEventListener('click',()=>{if(selectedId)editSong(selectedId);});
+  $('currentRemove').addEventListener('click',()=>{if(selectedId)removeSong(selectedId);});
   $('filters').addEventListener('click',e=>{
     const btn=e.target.closest('button[data-filter]');if(!btn)return;
     filter=btn.dataset.filter;
@@ -662,6 +853,7 @@
       const incoming=input.map(cleanSong);
       if(incoming.some(x=>!x))throw Error('Niektoré záznamy nemajú platný názov alebo odkaz.');
       const unique=new Set(incoming.map(x=>x.videoId));if(unique.size!==incoming.length)throw Error('Záloha obsahuje duplicitné videá.');
+      if(incoming.filter(x=>x.pinned).length>MAX_PINNED)throw Error('Záloha obsahuje viac než 3 pripnuté skladby.');
       if(cloudMode!=='local' && cloudMode!=='online')throw Error('Cloud sa ešte načítava.');
       if(!confirm('Import nahradí aktuálny zoznam '+songs.length+' skladieb zoznamom '+incoming.length+' skladieb. Pokračovať?'))return;
       if(cloudMode==='online') {
@@ -681,6 +873,8 @@
     $('currentTitle').textContent='Žiadna skladba';
     $('currentArtist').textContent='Vyber skladbu zo zoznamu.';
     $('openYoutube').hidden=true;
+    $('currentEdit').hidden=true;
+    $('currentRemove').hidden=true;
     renderScore(null);
     renderList();
   }
@@ -699,6 +893,8 @@
     $('currentArtist').textContent=current.artist||'Bez uvedeného autora';
     $('openYoutube').href=current.url;
     $('openYoutube').hidden=false;
+    $('currentEdit').hidden=false;
+    $('currentRemove').hidden=false;
     if(oldSong?.scoreUrl!==current.scoreUrl ||
       oldSong?.scorePreviewUrl!==current.scorePreviewUrl ||
       oldSong?.scoreSource!==current.scoreSource) renderScore(current);
