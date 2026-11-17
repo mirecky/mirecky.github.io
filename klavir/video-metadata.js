@@ -123,7 +123,7 @@
     const id = videoIdFromUrl(urlField.value);
     // A blur/change event follows paste: restart immediately without clearing
     // the just-scheduled lookup; repeated input for the same video is ignored.
-    if (id && id === lastVideoId && !overwrite && !immediate) return;
+    if (id && id === lastVideoId && !overwrite && (!immediate || timer === null)) return;
     cancelPending();
     retry.disabled = !id;
     if (!id) {
@@ -141,7 +141,7 @@
     }
     setMessage('Načítavam názov videa z YouTube…');
     const revision = requestRevision;
-    timer = setTimeout(() => load(id, revision, overwrite), immediate ? 0 : 450);
+    timer = setTimeout(() => { timer = null; void load(id, revision, overwrite); }, immediate ? 0 : 450);
   }
   urlField.addEventListener('input', () => lookup());
   urlField.addEventListener('change', () => lookup(true));
