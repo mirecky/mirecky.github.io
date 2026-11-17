@@ -152,6 +152,18 @@ window.cloudSync = {
     status('Ukladam do cloudu...', 'warn');
     await setDoc(songRef(song.id), song);
   },
+  async savePinnedOrder(orderedIds) {
+    assertCloud();
+    if (!Array.isArray(orderedIds) || orderedIds.length < 2 || orderedIds.length > 3 ||
+        new Set(orderedIds).size !== orderedIds.length) {
+      throw Error('Neplatný zoznam pripnutých skladieb.');
+    }
+    status('Ukladám poradie pripnutých skladieb...', 'warn');
+    // One atomic write. Only the order fields change; all other song data stays intact.
+    const batch=writeBatch(db);
+    orderedIds.forEach((id,index)=>batch.update(songRef(id),{pinnedOrder:index}));
+    await batch.commit();
+  },
   async remove(id) {
     assertCloud();
     status('Odstranujem z cloudu...', 'warn');
