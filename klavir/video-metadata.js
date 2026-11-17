@@ -121,6 +121,9 @@
   }
   function lookup(immediate=false, overwrite=false) {
     const id = videoIdFromUrl(urlField.value);
+    // A blur/change event follows paste: restart immediately without clearing
+    // the just-scheduled lookup; repeated input for the same video is ignored.
+    if (id && id === lastVideoId && !overwrite && !immediate) return;
     cancelPending();
     retry.disabled = !id;
     if (!id) {
@@ -130,7 +133,6 @@
         : 'Vlož YouTube odkaz. Názov sa načíta automaticky.');
       return;
     }
-    if (id === lastVideoId && !overwrite) return;
     const changed = id !== lastVideoId;
     lastVideoId = id;
     if (changed) {
