@@ -50,6 +50,17 @@
     .button.small { padding:7px 10px; font-size:13px; }
     .muted { color:var(--muted); }
     .player-help { margin:12px 0 0; color:var(--muted); font-size:12px; }
+    .cloud-banner { display:flex; justify-content:space-between; align-items:center; gap:14px; flex-wrap:wrap; padding:14px 17px; margin:0 0 21px; border:1px solid var(--line); border-radius:13px; background:#19202b; }
+    .cloud-info { display:grid; gap:2px; min-width:210px; }
+    .cloud-info strong { font-size:14px; }
+    #cloudStatus { font-size:12px; color:var(--muted); }
+    #cloudStatus[data-state="saved"] { color:#b8f2c4; }
+    #cloudStatus[data-state="warn"] { color:#f5d19b; }
+    #cloudStatus[data-state="error"] { color:#ffa7a4; }
+    #cloudAccount { font-size:12px; color:var(--muted); overflow-wrap:anywhere; }
+    .cloud-buttons { display:flex; flex-wrap:wrap; gap:8px; }
+    .cloud-buttons .button:disabled { opacity:.5; cursor:wait; }
+    @media(max-width:550px) { .cloud-banner { align-items:stretch; } .cloud-buttons { width:100%; } .cloud-buttons .button { flex:1; } }
     .score-panel { margin-top:20px; padding-top:18px; border-top:1px solid var(--line); }
     .score-panel h3 { font-size:18px; margin:0 0 9px; }
     .score-panel p { font-size:13px; color:var(--muted); margin:0 0 12px; }
@@ -113,6 +124,18 @@
     </div>
   </header>
 
+  <section class="cloud-banner" aria-label="Cloudové ukladanie">
+    <div class="cloud-info">
+      <strong>☁ Cloudové ukladanie</strong>
+      <span id="cloudStatus" role="status" aria-live="polite">Pripravujem pripojenie k Firebase…</span>
+      <span id="cloudAccount"></span>
+    </div>
+    <div class="cloud-buttons">
+      <button class="button primary small" id="cloudLogin" type="button" disabled>Prihlásiť cez Google</button>
+      <button class="button small" id="cloudTransfer" type="button" hidden>Preniesť miestne skladby</button>
+      <button class="button small" id="cloudLogout" type="button" hidden>Odhlásiť</button>
+    </div>
+  </section>
   <div class="layout">
     <section class="panel" aria-label="Prehrávač">
       <h2>Prehrávač</h2>
@@ -185,7 +208,7 @@
       </section>
     </div>
   </div>
-  <footer>Skladby sa uchovávajú iba v tomto prehliadači na tomto zariadení. Na prenos alebo zálohu použi export JSON.</footer>
+  <footer id="storageFooter">Bez prihlásenia sa skladby ukladajú iba v tomto prehliadači. Na zálohu môžeš použiť export JSON.</footer>
 </main>
 <script>
 (() => {
@@ -206,6 +229,7 @@
   let selectedId = songs.length ? songs[0].id : null;
   let filter = 'all';
   let editingId = null;
+  let cloudMode = 'local'; // local, loading, online, error
 
   function validId(id) { return /^[A-Za-z0-9_-]{11}$/.test(id); }
   function videoIdFromUrl(value) {
@@ -231,7 +255,7 @@
     const videoId = videoIdFromUrl(s.url);
     if (!videoId || !s.title.trim()) return null;
     return {
-      id:typeof s.id === 'string' && s.id.length <= 100 ? s.id : newId(),
+      id:typeof s.id === 'string' && /^[A-Za-z0-9_-]{1,100}$/.test(s.id) ? s.id : newId(),
       title:s.title.trim().slice(0,150),
       artist:typeof s.artist === 'string' ? s.artist.trim().slice(0,120) : '',
       url:'https://www.youtube.com/watch?v=' + videoId,
@@ -367,7 +391,15 @@
       const status=document.createElement('select');status.className='status';status.setAttribute('aria-label','Stav: '+song.title);
       for (const [value,label] of Object.entries(statuses)) { const opt=document.createElement('option');opt.value=value;opt.textContent=label;status.append(opt); }
       status.value=song.status;
-      status.addEventListener('change',()=>{song.status=status.value;persist();renderList();});
+      status.addEventListener('change', async () => {
+        if(cloudMode === 'online') {
+          try {await window.cloudSync.save({...song,status:status.value});showMessage('Stav uložený v cloude.');}
+          catch(err) {showMessage('Nepodarilo sa uložiť stav: '+err.message);renderList();}
+          return;
+        }
+        if(cloudMode !== 'local') {showMessage('Cloud sa ešte načítava alebo je nedostupný.');renderList();return;}
+        song.status=status.value;persist();renderList();
+      });
       const tools=document.createElement('div');tools.className='song-tools';
       tools.append(
         makeButton(LOCAL_FILE ? '▶ YouTube' : '▶ Prehrať',()=>playSong(song.id,true),'primary'),
@@ -397,20 +429,37 @@
   function resetForm() {
     editingId=null;$('songForm').reset();$('formTitle').textContent='Pridať skladbu';$('save').textContent='Pridať do zoznamu';$('cancel').hidden=true;
   }
-  function removeSong(id) {
+  async function removeSong(id) {
     const s=songs.find(x=>x.id===id);if(!s)return;
+    if(cloudMode!=='local' && cloudMode!=='online') {showMessage('Cloud ešte nie je pripravený.');return;}
     if(!confirm('Odstrániť skladbu „'+s.title+'“ zo zoznamu?'))return;
+    if(cloudMode==='online') {
+      try {await window.cloudSync.remove(id);if(editingId===id)resetForm();showMessage('Skladba bola odstránená z cloudu.');}
+      catch(err) {showMessage('Nepodarilo sa odstrániť skladbu: '+err.message);}
+      return;
+    }
     songs=songs.filter(x=>x.id!==id);
     if(editingId===id)resetForm();
     if(selectedId===id) {selectedId=null;$('player').replaceChildren();$('player').innerHTML='<div class="player-empty"><span class="big">♫</span><strong>Vyber skladbu zo zoznamu</strong></div>';$('currentTitle').textContent='Žiadna skladba';$('currentArtist').textContent='Vyber skladbu zo zoznamu.';$('openYoutube').hidden=true;renderScore(null);}
     persist();renderList();showMessage('Skladba bola odstránená.');
   }
-  $('songForm').addEventListener('submit', e=>{
+  $('songForm').addEventListener('submit', async e=>{
     e.preventDefault();
     const raw={title:$('title').value,artist:$('artist').value,url:$('url').value,status:$('status').value,notes:$('notes').value,scoreUrl:$('scoreUrl').value,scorePreviewUrl:$('scorePreviewUrl').value,scoreSource:$('scoreSourceInput').value,id:editingId||newId()};
     const s=cleanSong(raw);
     if(!s) {showMessage('Zadaj názov a platný odkaz na konkrétne YouTube video.');return;}
     if(songs.some(x=>x.videoId===s.videoId&&x.id!==editingId)) {showMessage('Toto video už v zozname máš.');return;}
+    if(cloudMode !== 'local') {
+      if(cloudMode !== 'online') {showMessage('Cloud ešte nie je pripravený.');return;}
+      $('save').disabled=true;
+      try {
+        await window.cloudSync.save(s);
+        resetForm();
+        showMessage('Skladba bola uložená v cloude.');
+      } catch(err) {showMessage('Nepodarilo sa uložiť do cloudu: '+err.message);}
+      finally {$('save').disabled=false;}
+      return;
+    }
     if(editingId) {const idx=songs.findIndex(x=>x.id===editingId);if(idx<0)return;songs[idx]=s;showMessage('Zmeny boli uložené.');}
     else {songs.push(s);showMessage('Skladba bola pridaná do zoznamu.');}
     persist();resetForm();if(selectedId===s.id)renderScore(s);renderList();
@@ -454,18 +503,61 @@
       const incoming=input.map(cleanSong);
       if(incoming.some(x=>!x))throw Error('Niektoré záznamy nemajú platný názov alebo odkaz.');
       const unique=new Set(incoming.map(x=>x.videoId));if(unique.size!==incoming.length)throw Error('Záloha obsahuje duplicitné videá.');
+      if(cloudMode!=='local' && cloudMode!=='online')throw Error('Cloud sa ešte načítava.');
       if(!confirm('Import nahradí aktuálny zoznam '+songs.length+' skladieb zoznamom '+incoming.length+' skladieb. Pokračovať?'))return;
+      if(cloudMode==='online') {
+        await window.cloudSync.replaceAll(incoming,songs);
+        resetForm();
+        showMessage('Cloudový import dokončený.');
+        return;
+      }
       songs=incoming;selectedId=null;resetForm();persist();
       $('player').replaceChildren();$('currentTitle').textContent='Vyber skladbu';$('currentArtist').textContent='Import dokončený.';$('openYoutube').hidden=true;
       renderScore(null);renderList();showMessage('Import dokončený: '+songs.length+' skladieb.');
     } catch(err) {showMessage('Import sa nepodaril: '+err.message);}
     finally {e.target.value='';}
   });
+  function clearPlayer() {
+    $('player').innerHTML='<div class="player-empty"><span class="big">♫</span><strong>Vyber skladbu zo zoznamu</strong></div>';
+    $('currentTitle').textContent='Žiadna skladba';
+    $('currentArtist').textContent='Vyber skladbu zo zoznamu.';
+    $('openYoutube').hidden=true;
+    renderScore(null);
+    renderList();
+  }
+  function replaceSongs(next) {
+    const oldSelected=selectedId;
+    const oldSong=songs.find(x=>x.id===oldSelected);
+    songs=next.map(cleanSong).filter(Boolean);
+    selectedId=songs.some(s=>s.id===oldSelected)?oldSelected:(songs[0]?.id||null);
+    if(!selectedId) {clearPlayer();return;}
+    const current=songs.find(s=>s.id===selectedId);
+    if(selectedId!==oldSelected || oldSong?.videoId!==current.videoId) {
+      playSong(selectedId);
+      return;
+    }
+    $('currentTitle').textContent=current.title;
+    $('currentArtist').textContent=current.artist||'Bez uvedeného autora';
+    $('openYoutube').href=current.url;
+    $('openYoutube').hidden=false;
+    if(oldSong?.scoreUrl!==current.scoreUrl ||
+      oldSong?.scorePreviewUrl!==current.scorePreviewUrl ||
+      oldSong?.scoreSource!==current.scoreSource) renderScore(current);
+    renderList();
+  }
+  window.repertoireApp = {
+    setCloudMode(mode) {cloudMode=mode;},
+    replaceFromCloud(next) {replaceSongs(next);},
+    replaceWithLocal() {replaceSongs(load());},
+    getLocalSongs() {return load();},
+    showMessage
+  };
   $('localNotice').hidden = !LOCAL_FILE;
   if (LOCAL_FILE) $('playerHelp').textContent = 'Na lokálne otvorenej HTML stránke sa videá z bezpečnostných dôvodov otvárajú na YouTube. Zoznam a poznámky môžeš spravovať aj bez zverejnenia stránky.';
   if (selectedId) playSong(selectedId);
   else {renderScore(null);renderList();}
 })();
 </script>
+<script type="module" src="./cloud-sync.js?v=1"></script>
 </body>
 </html>
