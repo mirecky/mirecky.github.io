@@ -242,15 +242,24 @@
       font-size:23px;font-weight:700;line-height:1;}
     .pin-order-grip:hover {background:#373039;border-color:var(--gold);}
     .pin-order-grip:active {cursor:grabbing;}
-    .pin-order-arrow {display:flex;justify-content:center;align-items:center;
-      background:transparent;border:1px solid #424959;color:#d4d6df;
-      border-radius:7px;width:30px;height:28px;padding:0;cursor:pointer;font-size:16px;}
-    .pin-order-arrow:hover:not(:disabled) {border-color:var(--gold);color:var(--gold);}
-    .pin-order-arrow:disabled {opacity:.22;cursor:default;}
-    .pin-order-grip:focus-visible,.pin-order-arrow:focus-visible {outline:2px solid var(--gold);outline-offset:2px;}
+    .pin-order-grip:focus-visible {outline:2px solid var(--gold);outline-offset:2px;}
     .pinned-list .song.dragging {opacity:.48;}
     .pinned-list .song.drag-target {outline:2px dashed var(--gold);outline-offset:2px;background:#2d2730;}
     .pin-order-grip.is-busy {opacity:.55;cursor:wait;}
+    .difficulty-fields {display:grid;grid-template-columns:minmax(115px,.45fr) minmax(160px,1fr);gap:10px;}
+    .difficulty-fields .field {min-width:0;}
+    .difficulty-field-help {color:var(--muted);font-size:11px;line-height:1.45;margin:2px 0 12px;}
+    .difficulty-control {display:inline-flex;align-items:center;gap:6px;min-width:0;max-width:100%;}
+    .difficulty-control select {width:auto;max-width:100%;min-width:107px;padding:6px 28px 6px 9px;font-size:12px;font-weight:700;border-color:#79623d;background:#292b35;color:#f1d5a2;}
+    .difficulty-badge {display:inline-flex;align-items:center;border:1px solid #635a4b;background:#282831;color:#eccf98;padding:3px 8px;border-radius:7px;font-size:11px;font-weight:700;}
+    .difficulty-control small {font-size:11px;color:var(--muted);}
+    .pinned-list .difficulty-control {margin:5px 0 3px;}
+    .song-row .difficulty-control select {font-size:11px;min-width:93px;padding:5px 20px 5px 6px;}
+    .song-row .difficulty-badge {font-size:10px;padding:3px 5px;}
+    .group-variant-tools {display:flex;align-items:center;gap:8px;margin-top:6px;flex-wrap:wrap;}
+    .viewer-variant {display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin-top:8px;}
+    .viewer-variant .difficulty-control select {font-size:12px;}
+    @media(max-width:580px){.difficulty-fields{grid-template-columns:1fr;}.song-row .difficulty-control select{min-width:86px;}}
     .library-heading {padding-top:13px;border-top:1px solid var(--line);}
     .sort-row {display:flex;align-items:center;justify-content:space-between;gap:9px;margin:4px 0 9px;}
     .sort-row label {color:var(--muted);font-size:11px;}
@@ -469,7 +478,7 @@
       <p class="local-notice" id="localNotice" hidden>Stránka je otvorená z telefónu ako lokálny súbor. YouTube tu blokuje vložený prehrávač (chyba 153). Videá preto otvoríš jedným kliknutím na YouTube. Ak stránku umiestnime na HTTPS, video sa môže prehrávať priamo tu.</p>
       <div class="player" id="player"><div class="player-empty"><span class="big">♫</span><strong>Vyber skladbu zo zoznamu</strong><p>Videonávod sa zobrazí tu.</p></div></div>
       <div class="now">
-        <div><h3 id="currentTitle">Žiadna skladba</h3><p id="currentArtist">Vyber si skladbu napravo.</p><button id="currentSetStart" class="start-edit-link" type="button" hidden>Prehrávanie od 0:00 · Nastaviť</button></div>
+        <div><h3 id="currentTitle">Žiadna skladba</h3><p id="currentArtist">Vyber si skladbu napravo.</p><div id="viewerDifficulty" class="viewer-variant" hidden></div><button id="currentSetStart" class="start-edit-link" type="button" hidden>Prehrávanie od 0:00 · Nastaviť</button></div>
         <div class="viewer-actions">
           <a class="button small" id="openYoutube" href="https://www.youtube.com/" target="_blank" rel="noopener noreferrer" hidden>Otvoriť na YouTube ↗</a>
           <button class="button small" id="currentEdit" type="button" hidden>Upraviť</button>
@@ -654,6 +663,21 @@
             <small>0 = od začiatku. Presné sekundy nastavíš šípkami pri číselnom poli.</small>
           </div>
           <div class="field"><label for="status">Stav učenia</label><select id="status" name="status"><option value="want">Chcem hrať</option><option value="learning">Učím sa</option><option value="learned">Zvládnuté</option></select></div>
+          <div class="difficulty-fields">
+            <div class="field"><label for="difficulty">Náročnosť videonávodu</label>
+              <select id="difficulty" name="difficulty">
+                <option value="">Neurčená</option>
+                <option value="easy">EASY</option>
+                <option value="medium">MEDIUM</option>
+                <option value="profi">PROFI</option>
+              </select>
+            </div>
+            <div class="field"><label for="workGroup">Spoločný názov skladby</label>
+              <input id="workGroup" name="workGroup" maxlength="150" list="existingWorkGroups" placeholder="Napr. Ružový panter">
+              <datalist id="existingWorkGroups"></datalist>
+            </div>
+          </div>
+          <p class="difficulty-field-help">Rovnaký spoločný názov združí rôzne videonávody pod jednu skladbu. Každá náročnosť môže mať vlastné video, noty a akordy. Ak názov skupiny nezadáš, použije sa názov skladby.</p>
           <details class="advanced-fields" id="advancedFields">
             <summary>Hudobný rozbor, noty a poznámky <span>(nepovinné)</span></summary>
             <div class="advanced-inner">
@@ -718,6 +742,8 @@
     MOONLIGHT
   ];
   const statuses = {want:'Chcem hrať',learning:'Učím sa',learned:'Zvládnuté'};
+  const DIFFICULTIES={easy:'EASY',medium:'MEDIUM',profi:'PROFI'};
+  const LEVEL_ORDER={easy:0,medium:1,profi:2,'':3};
   const THEORY_ROOTS=['C','C#','D','Eb','E','F','F#','G','Ab','A','Bb','B'];
 
   const MAX_PINNED=3;
@@ -830,6 +856,9 @@
       id:typeof s.id === 'string' && /^[A-Za-z0-9_-]{1,100}$/.test(s.id) ? s.id : newId(),
       title:s.title.trim().slice(0,150),
       artist:typeof s.artist === 'string' ? s.artist.trim().slice(0,120) : '',
+      difficulty:Object.hasOwn(DIFFICULTIES,s.difficulty)?s.difficulty:'',
+      workGroup:typeof s.workGroup==='string'&&s.workGroup.trim()
+        ?s.workGroup.trim().slice(0,150):s.title.trim().slice(0,150),
       url:'https://www.youtube.com/watch?v=' + videoId,
       videoId,
       status:statuses[s.status] ? s.status : 'want',
@@ -1422,8 +1451,6 @@
       pinButton(song),
       more
     );
-    const pinnedAll=sortedPinned();
-    const pinIndex=pinnedAll.findIndex(s=>s.id===song.id);
     const reordering=document.createElement('div');
     reordering.className='pin-order-tools';
     const grip=document.createElement('span');
@@ -1431,7 +1458,7 @@
     grip.draggable=true;
     grip.tabIndex=0;
     grip.setAttribute('role','button');
-    grip.setAttribute('aria-label','Presunúť skladbu '+song.title+' potiahnutím myšou alebo šípkami');
+    grip.setAttribute('aria-label','Presunúť skladbu '+song.title+' potiahnutím myšou. Klávesmi šípka hore a dolu možno zmeniť poradie.');
     grip.textContent='⠿';
     grip.title='Chyť a presuň na miesto inej pripnutej skladby';
     grip.addEventListener('dragstart',event=>{
@@ -1458,17 +1485,7 @@
         movePinnedByOffset(song.id,event.key==='ArrowUp'?-1:1);
       }
     });
-    function shiftButton(direction,label,textContent){
-      const control=document.createElement('button');
-      control.type='button';control.className='pin-order-arrow';
-      control.textContent=textContent;
-      control.title=label+' skladbu '+song.title;
-      control.setAttribute('aria-label',control.title);
-      control.disabled=pinIndex<0 || (direction<0?pinIndex===0:pinIndex===pinnedAll.length-1);
-      control.addEventListener('click',()=>movePinnedByOffset(song.id,direction));
-      return control;
-    }
-    reordering.append(shiftButton(-1,'Posunúť vyššie','↑'),grip,shiftButton(1,'Posunúť nižšie','↓'));
+    reordering.append(grip);
     content.append(title,artist,statusSelector(song),tools);
     card.append(reordering,thumbnailButton,content);
     return card;
@@ -1521,6 +1538,8 @@
     const song=songs.find(s=>s.id===id);if(!song)return;
     editingId=id;
     $('title').value=song.title; $('artist').value=song.artist; $('url').value=song.url; $('status').value=song.status; $('notes').value=song.notes;
+    $('difficulty').value=song.difficulty||'';
+    $('workGroup').value=song.workGroup||song.title;
     $('scoreUrl').value=song.scoreUrl||''; $('scorePreviewUrl').value=song.scorePreviewUrl||''; $('scoreSourceInput').value=song.scoreSource||'';
     $('originType').value=song.originType||'';
     $('originWork').value=song.originWork||'';
@@ -1557,7 +1576,7 @@
   $('songForm').addEventListener('submit', async e=>{
     e.preventDefault();
     const previous=editingId?songs.find(x=>x.id===editingId):null;
-    const raw={title:$('title').value,artist:$('artist').value,url:$('url').value,status:$('status').value,startSeconds:$('startSeconds').value,pinnedOrder:previous?.pinnedOrder??null,sheetAnalysis:previous?.sheetAnalysis||null,musicXmlAnalysis:previous?.musicXmlAnalysis||null,analysisSource:previous?.analysisChords===$('analysisChords').value.trim()&&previous?.videoId===videoIdFromUrl($('url').value)?previous?.analysisSource:'',analysisModel:previous?.analysisChords===$('analysisChords').value.trim()&&previous?.videoId===videoIdFromUrl($('url').value)?previous?.analysisModel:'',analysisFallbackCode:previous?.analysisChords===$('analysisChords').value.trim()&&previous?.videoId===videoIdFromUrl($('url').value)?previous?.analysisFallbackCode:0,analysisFallbackReason:previous?.analysisChords===$('analysisChords').value.trim()&&previous?.videoId===videoIdFromUrl($('url').value)?previous?.analysisFallbackReason:'',notes:$('notes').value,originType:$('originType').value,originWork:$('originWork').value,originYear:$('originYear').value,originStory:$('originStory').value,originSource:$('originSource').value,scoreUrl:$('scoreUrl').value,scorePreviewUrl:$('scorePreviewUrl').value,scoreSource:$('scoreSourceInput').value,keyRoot:$('keyRoot').value,keyMode:$('keyMode').value,analysisChords:$('analysisChords').value,pinned:previous?.pinned??false,addedAt:previous?.addedAt??Date.now(),id:editingId||newId()};
+    const raw={title:$('title').value,artist:$('artist').value,url:$('url').value,status:$('status').value,difficulty:$('difficulty').value,workGroup:$('workGroup').value,startSeconds:$('startSeconds').value,pinnedOrder:previous?.pinnedOrder??null,sheetAnalysis:previous?.sheetAnalysis||null,musicXmlAnalysis:previous?.musicXmlAnalysis||null,analysisSource:previous?.analysisChords===$('analysisChords').value.trim()&&previous?.videoId===videoIdFromUrl($('url').value)?previous?.analysisSource:'',analysisModel:previous?.analysisChords===$('analysisChords').value.trim()&&previous?.videoId===videoIdFromUrl($('url').value)?previous?.analysisModel:'',analysisFallbackCode:previous?.analysisChords===$('analysisChords').value.trim()&&previous?.videoId===videoIdFromUrl($('url').value)?previous?.analysisFallbackCode:0,analysisFallbackReason:previous?.analysisChords===$('analysisChords').value.trim()&&previous?.videoId===videoIdFromUrl($('url').value)?previous?.analysisFallbackReason:'',notes:$('notes').value,originType:$('originType').value,originWork:$('originWork').value,originYear:$('originYear').value,originStory:$('originStory').value,originSource:$('originSource').value,scoreUrl:$('scoreUrl').value,scorePreviewUrl:$('scorePreviewUrl').value,scoreSource:$('scoreSourceInput').value,keyRoot:$('keyRoot').value,keyMode:$('keyMode').value,analysisChords:$('analysisChords').value,pinned:previous?.pinned??false,addedAt:previous?.addedAt??Date.now(),id:editingId||newId()};
     const s=cleanSong(raw);
     if(!s) {showMessage('Zadaj názov a platný odkaz na konkrétne YouTube video.');return;}
     if(songs.some(x=>x.videoId===s.videoId&&x.id!==editingId)) {showMessage('Toto video už v zozname máš.');return;}
