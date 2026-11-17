@@ -445,10 +445,10 @@
     <section class="panel dialog-content" aria-label="Vyhľadávanie na YouTube">
         
         <form class="yt-search-form" id="ytSearchForm" action="https://www.youtube.com/results" method="get" target="_blank">
-          <input id="ytSearchQuery" name="search_query" type="search" value="Moonlight Sonata Beethoven piano tutorial" required aria-label="Hľadať videá na YouTube" placeholder="Názov skladby alebo interpreta…">
+          <input id="ytSearchQuery" name="search_query" type="search" required aria-label="Hľadať videá na YouTube" placeholder="Napr. Pink Panther…">
           <button class="button primary" type="submit">Hľadať na YouTube ↗</button>
         </form>
-        <p class="yt-help">Výsledky sa otvoria na YouTube. Vyber video, skopíruj jeho odkaz a vlož ho sem. Ak je stránka otvorená z disku, video sa otvorí na YouTube; na webovej HTTPS stránke sa môže prehrávať priamo tu.</p>
+        <p class="yt-help">Stačí napísať názov skladby. Pri vyhľadávaní sa automaticky doplní „piano tutorial“. Vyber video na YouTube a jeho odkaz vlož nižšie.</p>
         <div class="yt-secondary">
           <label for="foundUrl">Vložiť odkaz na vybrané video</label>
           <div class="yt-link-row"><input id="foundUrl" type="url" placeholder="https://youtu.be/…" aria-describedby="ytHint"><button class="button" id="useFound" type="button">Použiť video</button></div>
@@ -1037,9 +1037,21 @@
     else {songs.push(s);showMessage('Skladba bola pridaná do zoznamu.');}
     persist();resetForm();$('addDialog').close();if(selectedId===s.id){renderScore(s);renderTheory(s);}renderList();
   });
+  function pianoTutorialQuery(query) {
+    const trimmed=String(query||'').trim();
+    if(!trimmed)return '';
+    return /\bpiano\s+tutorials?\b/i.test(trimmed) ? trimmed : trimmed+' piano tutorial';
+  }
+  $('ytSearchForm').addEventListener('submit', event => {
+    const input=$('ytSearchQuery');
+    const query=pianoTutorialQuery(input.value);
+    if(!query){event.preventDefault();return;}
+    input.value=query;
+  });
   function searchYoutube(query) {
-    $('ytSearchQuery').value=query;
-    window.open('https://www.youtube.com/results?search_query='+encodeURIComponent(query),'_blank','noopener,noreferrer');
+    $('ytSearchQuery').value=String(query||'').trim();
+    const term=pianoTutorialQuery(query);
+    if(term)window.open('https://www.youtube.com/results?search_query='+encodeURIComponent(term),'_blank','noopener,noreferrer');
   }
   $('useFound').addEventListener('click',()=>{
     const raw=$('foundUrl').value;
@@ -1160,6 +1172,6 @@
   else {renderScore(null);renderList();}
 })();
 </script>
-<script type="module" src="./cloud-sync.js?v=1"></script>
+<script type="module" src="./cloud-sync.js?v=2"></script>
 </body>
 </html>
