@@ -104,11 +104,12 @@
       const data = await fetchDetails(videoId, activeController.signal);
       if (revision !== requestRevision || videoIdFromUrl(urlField.value) !== videoId || !dialog.open) return;
       const metadata = metadataFromTitle(data.title);
-      if (overwrite || titleField.value === startingTitle) titleField.value = metadata.title;
+      const titleWasAutoFilled=overwrite || titleField.value === startingTitle;
+      if (titleWasAutoFilled) titleField.value = metadata.title;
       if (overwrite || composerField.value === startingComposer) composerField.value = metadata.composer;
-      // The displayed title may have "EASY piano tutorial" stripped.
-      // Pass the ORIGINAL video title so the repertoire can detect its level.
-      document.dispatchEvent(new CustomEvent('klavir:video-metadata',{
+      // Use the original YouTube title for tagging, even if the displayed
+      // title was simplified. Respect a title manually edited meanwhile.
+      if (titleWasAutoFilled) document.dispatchEvent(new CustomEvent('klavir:video-metadata',{
         detail:{videoId,title:data.title,displayTitle:metadata.title}
       }));
       setMessage(metadata.composer
