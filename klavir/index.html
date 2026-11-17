@@ -292,7 +292,12 @@
     .start-settings label {display:flex;gap:12px;align-items:center;justify-content:space-between;}
     .start-preview {font-size:13px;font-weight:700;color:var(--gold);}
     .start-controls {display:flex;align-items:center;gap:14px;margin:10px 0 6px;}
-    .start-controls input[type="range"] {min-width:0;flex:1;padding:0;accent-color:var(--gold);cursor:pointer;}
+    .video-metadata {display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-top:7px;}
+    #videoMetaStatus {font-size:11px;color:var(--muted);flex:1;min-width:170px;}
+    #videoMetaStatus[data-state="error"] {color:var(--danger);}
+    #videoMetaStatus[data-state="success"] {color:#b8f2c4;}
+    .start-edit-link {display:inline-block;background:none;border:0;color:var(--gold);font-size:12px;text-decoration:underline;text-underline-offset:3px;cursor:pointer;padding:4px 0;margin-top:4px;}
+    .start-edit-link:hover {color:#ffe0ad;}
     .start-number {flex:none;display:flex;align-items:center;gap:6px;}
     .start-number input {width:81px;min-width:0;text-align:right;padding:8px;}
     .start-number span {font-size:12px;color:var(--muted);}
@@ -385,7 +390,7 @@
       <p class="local-notice" id="localNotice" hidden>Stránka je otvorená z telefónu ako lokálny súbor. YouTube tu blokuje vložený prehrávač (chyba 153). Videá preto otvoríš jedným kliknutím na YouTube. Ak stránku umiestnime na HTTPS, video sa môže prehrávať priamo tu.</p>
       <div class="player" id="player"><div class="player-empty"><span class="big">♫</span><strong>Vyber skladbu zo zoznamu</strong><p>Videonávod sa zobrazí tu.</p></div></div>
       <div class="now">
-        <div><h3 id="currentTitle">Žiadna skladba</h3><p id="currentArtist">Vyber si skladbu napravo.</p><p id="currentStartTime" class="current-start" hidden></p></div>
+        <div><h3 id="currentTitle">Žiadna skladba</h3><p id="currentArtist">Vyber si skladbu napravo.</p><button id="currentSetStart" class="start-edit-link" type="button" hidden>Prehrávanie od 0:00 · Nastaviť</button></div>
         <div class="viewer-actions">
           <a class="button small" id="openYoutube" href="https://www.youtube.com/" target="_blank" rel="noopener noreferrer" hidden>Otvoriť na YouTube ↗</a>
           <button class="button small" id="currentEdit" type="button" hidden>Upraviť</button>
@@ -473,14 +478,11 @@
         <form id="songForm">
           <div class="field"><label for="title">Názov skladby *</label><input id="title" name="title" required maxlength="150" placeholder="Napr. Comptine d’un autre été"></div>
           <div class="field"><label for="artist">Autor / skladateľ</label><input id="artist" name="artist" maxlength="120" placeholder="Napr. Yann Tiersen"></div>
-          <div class="field"><label for="url">Odkaz na YouTube *</label><input id="url" name="url" required type="url" placeholder="https://youtu.be/…"><small>Podporované: youtube.com/watch, youtu.be, shorts, live a embed odkazy.</small></div>
+          <div class="field"><label for="url">Odkaz na YouTube *</label><input id="url" name="url" required type="url" placeholder="https://youtu.be/…" autocomplete="off"><small>Po vložení alebo zmene odkazu sa automaticky načíta názov videa a dostupný údaj o skladateľovi.</small><div class="video-metadata"><span id="videoMetaStatus" aria-live="polite" role="status"></span><button id="videoMetaRetry" class="button small minimal" type="button">Načítať znova</button></div></div>
           <div class="field start-settings">
             <label for="startSeconds">Prehrávať od <span id="startPreview" class="start-preview">0:00</span></label>
-            <div class="start-controls">
-              <input id="startSlider" type="range" min="0" max="600" step="1" value="0" aria-label="Začiatok videa – posuvník">
-              <div class="start-number"><input id="startSeconds" name="startSeconds" type="number" min="0" max="86400" step="1" inputmode="numeric" value="0" aria-label="Začiatok videa v sekundách"><span>s</span></div>
-            </div>
-            <small>0 = od začiatku. Posuvník nastaví prvých 10 minút; pre dlhšie videá môžeš zadať sekundy ručne.</small>
+            <div class="start-controls"><div class="start-number"><input id="startSeconds" name="startSeconds" type="number" min="0" max="86400" step="1" inputmode="numeric" value="0" aria-label="Začiatok videa v sekundách"><span>sekúnd</span></div></div>
+            <small>0 = od začiatku. Presné sekundy nastavíš šípkami pri číselnom poli.</small>
           </div>
           <div class="field"><label for="status">Stav učenia</label><select id="status" name="status"><option value="want">Chcem hrať</option><option value="learning">Učím sa</option><option value="learned">Zvládnuté</option></select></div>
           <details class="advanced-fields" id="advancedFields">
@@ -578,19 +580,15 @@
     return result.href;
   }
   function updateStartDisplay(song) {
-    const el=$('currentStartTime');
-    el.hidden=!song || !song.startSeconds;
-    el.textContent=song?.startSeconds ? 'Prehrávanie od '+formatStartSeconds(song.startSeconds) : '';
+    const el=$('currentSetStart');
+    el.hidden=!song;
+    if(song)el.textContent='Prehrávanie od '+formatStartSeconds(song.startSeconds||0)+' · Nastaviť';
   }
   function syncStartControls(value) {
     const seconds=normalizeStartSeconds(value);
     $('startSeconds').value=String(seconds);
-    const slider=$('startSlider');
-    slider.max=String(Math.max(600,seconds));
-    slider.value=String(seconds);
     $('startPreview').textContent=formatStartSeconds(seconds);
   }
-  $('startSlider').addEventListener('input',event=>syncStartControls(event.target.value));
   $('startSeconds').addEventListener('input',event=>{
     if(event.target.value==='')return;
     const n=Number(event.target.value);
@@ -1055,6 +1053,7 @@
     $('advancedFields').open=Boolean(song.scoreUrl||song.scorePreviewUrl||song.notes||song.keyRoot);
     showMessage('Upravuješ: '+song.title);
     $('addDialog').showModal();
+    document.dispatchEvent(new CustomEvent('klavir:editor-open',{detail:{videoId:song.videoId}}));
   }
   function resetForm() {
     editingId=null;$('songForm').reset();syncStartControls(0);$('formTitle').textContent='Pridať skladbu';$('dialogTitle').textContent='Pridať skladbu';$('save').textContent='Pridať do zoznamu';$('cancel').hidden=true;$('advancedFields').open=false;
@@ -1124,10 +1123,11 @@
     if(!videoId){$('ytHint').textContent='Vlož odkaz na konkrétne YouTube video, nie odkaz na výsledky vyhľadávania.';return;}
     $('url').value='https://www.youtube.com/watch?v='+videoId;
     $('foundUrl').value='';
-    $('ytHint').textContent='Odkaz je pripravený. Vyplň názov skladby a ulož ju do zoznamu.';
+    $('ytHint').textContent='Odkaz je pripravený. Názov videa sa načíta automaticky.';
     $('ytDialog').close();
-    $('addDialog').showModal();
-    $('title').focus({preventScroll:true});
+    if(!$('addDialog').open)$('addDialog').showModal();
+    $('url').dispatchEvent(new Event('input',{bubbles:true}));
+    $('url').focus({preventScroll:true});
   });
   $('cancel').addEventListener('click',()=>{resetForm();$('addDialog').close();showMessage('Úprava zrušená.');});
   $('openAddSong').addEventListener('click',()=>{
@@ -1151,6 +1151,12 @@
   $('search').addEventListener('input',renderList);
   $('sortSongs').addEventListener('change',event=>{sortBy=event.target.value;renderList();});
   $('currentEdit').addEventListener('click',()=>{if(selectedId)editSong(selectedId);});
+  $('currentSetStart').addEventListener('click',()=>{
+    if(!selectedId)return;
+    editSong(selectedId);
+    $('startSeconds').focus();
+    $('startSeconds').select();
+  });
   $('currentRemove').addEventListener('click',()=>{if(selectedId)removeSong(selectedId);});
   $('filters').addEventListener('click',e=>{
     const btn=e.target.closest('button[data-filter]');if(!btn)return;
@@ -1240,6 +1246,7 @@
   else {renderScore(null);renderList();}
 })();
 </script>
+<script src="./video-metadata.js?v=1" defer></script>
 <script type="module" src="./cloud-sync.js?v=2"></script>
 </body>
 </html>
