@@ -50,6 +50,17 @@
     .button.small { padding:7px 10px; font-size:13px; }
     .muted { color:var(--muted); }
     .player-help { margin:12px 0 0; color:var(--muted); font-size:12px; }
+    .score-panel { margin-top:20px; padding-top:18px; border-top:1px solid var(--line); }
+    .score-panel h3 { font-size:18px; margin:0 0 9px; }
+    .score-panel p { font-size:13px; color:var(--muted); margin:0 0 12px; }
+    .score-actions { display:flex; flex-wrap:wrap; gap:8px; margin:14px 0 10px; }
+    .score-badge { display:inline-block; font-size:11px; border-radius:30px; background:#294335; color:#c0f1d1; padding:3px 9px; }
+    .score-badge.preview { background:#493824; color:#ffe0a9; }
+    .score-badge.none { background:#323743; color:#c4c6ce; }
+    .score-doc { overflow:hidden; border:1px solid var(--line); border-radius:11px; background:#f4f4f4; margin-top:12px; }
+    .score-doc iframe { width:100%; height:min(75vh,760px); min-height:380px; border:0; display:block; }
+    .score-doc p { padding:9px 12px; margin:0; background:#212631; font-size:12px; }
+    .score-panel .score-source { font-size:12px; color:var(--muted); }
     .right-stack { display:grid; gap:22px; }
     .yt-search-form, .yt-link-row { display:flex; gap:9px; align-items:stretch; }
     .yt-search-form input, .yt-link-row input { flex:1; }
@@ -112,6 +123,20 @@
         <a class="button small" id="openYoutube" href="https://www.youtube.com/" target="_blank" rel="noopener noreferrer" hidden>Otvoriť na YouTube ↗</a>
       </div>
       <p class="player-help" id="playerHelp">Prehrávanie vyžaduje internet. Niektoré videá nepovoľujú vložené prehrávanie; vtedy použi „Otvoriť na YouTube“.</p>
+      <section class="score-panel" id="scorePanel" aria-label="Notový zápis">
+        <h3>Notový zápis <span id="scoreBadge" class="score-badge none">Vyber skladbu</span></h3>
+        <p id="scoreInfo">Vyber skladbu a zobrazia sa jej bezplatné noty alebo náhľad od vydavateľa.</p>
+        <div class="score-actions">
+          <a id="scoreOpen" class="button primary small" target="_blank" rel="noopener noreferrer" hidden>Otvoriť noty ↗</a>
+          <button id="scoreToggle" class="button small" type="button" aria-expanded="false" hidden>Zobraziť PDF tu</button>
+          <button id="scoreSearch" class="button small" type="button">Hľadať noty / náhľad ↗</button>
+        </div>
+        <p id="scoreSource" class="score-source"></p>
+        <div class="score-doc" id="scoreDocument" hidden>
+          <iframe id="scoreFrame" title="Notový zápis v PDF" loading="lazy"></iframe>
+          <p>Ak sa PDF v mobile nezobrazí, otvor ho samostatným tlačidlom. Náhľady vydavateľov sa otvárajú na ich stránkach.</p>
+        </div>
+      </section>
     </section>
 
     <div class="right-stack">
@@ -147,6 +172,9 @@
           <div class="field"><label for="title">Názov skladby *</label><input id="title" name="title" required maxlength="150" placeholder="Napr. Comptine d’un autre été"></div>
           <div class="field"><label for="artist">Autor / skladateľ</label><input id="artist" name="artist" maxlength="120" placeholder="Napr. Yann Tiersen"></div>
           <div class="field"><label for="url">Odkaz na YouTube *</label><input id="url" name="url" required type="url" placeholder="https://youtu.be/…"><small>Podporované: youtube.com/watch, youtu.be, shorts, live a embed odkazy.</small></div>
+          <div class="field"><label for="scoreUrl">Kompletné noty zadarmo (odkaz)</label><input id="scoreUrl" type="url" maxlength="2048" placeholder="https://.../noty.pdf"><small>Len legálne dostupný kompletný notový zápis.</small></div>
+          <div class="field"><label for="scorePreviewUrl">Náhľad nôt (odkaz)</label><input id="scorePreviewUrl" type="url" maxlength="2048" placeholder="https://.../preview"><small>Ak sú noty platené, ulož oficiálny náhľad vydavateľa.</small></div>
+          <div class="field"><label for="scoreSourceInput">Zdroj / licencia</label><input id="scoreSourceInput" maxlength="200" placeholder="Mutopia · CC BY-SA, alebo Score Exchange · náhľad"></div>
           <div class="field"><label for="status">Stav učenia</label><select id="status" name="status"><option value="want">Chcem hrať</option><option value="learning">Učím sa</option><option value="learned">Zvládnuté</option></select></div>
           <div class="field"><label for="notes">Poznámky</label><textarea id="notes" name="notes" maxlength="500" placeholder="Prstoklad, náročnosť, čo precvičiť…"></textarea></div>
           <div class="form-actions"><button class="button primary" id="save" type="submit">Pridať do zoznamu</button><button class="button minimal" id="cancel" type="button" hidden>Zrušiť úpravu</button></div>
@@ -166,6 +194,8 @@
   const OLD_KEY = 'moj-klavirny-repertoar-v1';
   const LOCAL_FILE = !['https:', 'http:'].includes(location.protocol) || !location.hostname;
   const MOONLIGHT = { id:'moonlight-sonata-1', title:'Moonlight Sonata – 1. časť (Adagio sostenuto)', artist:'Ludwig van Beethoven', url:'https://www.youtube.com/watch?v=wQuBfKikBq0', videoId:'wQuBfKikBq0', status:'want', notes:'Sonáta č. 14, op. 27 č. 2. Pomalý podrobný klavírny videonávod pre začiatočníkov.' };
+  const MOONLIGHT_SCORE='https://www.mutopiaproject.org/ftp/BeethovenLv/O27/moonlight/moonlight-a4.pdf';
+  const GODFATHER_PREVIEW='https://www.scoreexchange.com/scores/the-godfather-love-theme-405866.html';
   const STARTER = [
     { id:'godfather-main-theme', title:'The Godfather – Main Theme', artist:'Nino Rota', url:'https://youtu.be/YdWK3qsDyXA', videoId:'YdWK3qsDyXA', status:'want', notes:'Klavírny videonávod (1. časť).' },
     MOONLIGHT
@@ -191,6 +221,11 @@
       return validId(id) ? id : null;
     } catch { return null; }
   }
+  function scoreLink(s) {
+    if(typeof s!=='string'||!s.trim()||s.length>2048)return '';
+    try {const url=new URL(s.trim());return ['https:','http:'].includes(url.protocol)?url.href:'';}
+    catch{return '';}
+  }
   function cleanSong(s) {
     if (!s || typeof s !== 'object' || typeof s.title !== 'string' || typeof s.url !== 'string') return null;
     const videoId = videoIdFromUrl(s.url);
@@ -202,7 +237,10 @@
       url:'https://www.youtube.com/watch?v=' + videoId,
       videoId,
       status:statuses[s.status] ? s.status : 'want',
-      notes:typeof s.notes === 'string' ? s.notes.trim().slice(0,500) : ''
+      notes:typeof s.notes === 'string' ? s.notes.trim().slice(0,500) : '',
+      scoreUrl:typeof s.scoreUrl==='string'?scoreLink(s.scoreUrl):(videoId==='wQuBfKikBq0'?MOONLIGHT_SCORE:''),
+      scorePreviewUrl:typeof s.scorePreviewUrl==='string'?scoreLink(s.scorePreviewUrl):(videoId==='YdWK3qsDyXA'?GODFATHER_PREVIEW:''),
+      scoreSource:typeof s.scoreSource==='string'?s.scoreSource.trim().slice(0,200):(videoId==='wQuBfKikBq0'?'Mutopia Project · CC BY-SA 2.5':videoId==='YdWK3qsDyXA'?'Score Exchange · náhľad prvej strany (celé noty platené)':'')
     };
   }
   function newId() { return 'song-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,8); }
@@ -266,8 +304,49 @@
     $('currentArtist').textContent = song.artist || 'Bez uvedeného autora';
     $('openYoutube').href = song.url;
     $('openYoutube').hidden = false;
+    renderScore(song);
     renderList();
   }
+  function renderScore(song) {
+    const full=song?.scoreUrl||'';
+    const preview=song?.scorePreviewUrl||'';
+    const kind=full?'full':preview?'preview':'none';
+    const link=full||preview;
+    $('scoreBadge').className='score-badge '+(kind==='preview'?'preview':kind==='none'?'none':'');
+    $('scoreBadge').textContent=kind==='full'?'Kompletné zdarma':kind==='preview'?'Oficiálny náhľad':'Náhľad sa hľadá';
+    $('scoreInfo').textContent=!song?'Vyber skladbu a zobrazia sa jej bezplatné noty alebo náhľad od vydavateľa.'
+      :kind==='full'?'Máme kompletný bezplatný notový zápis. Ak ide o PDF, môžeš ho zobraziť aj priamo tu.'
+      :kind==='preview'?'Máme oficiálny náhľad vydavateľa. Celé noty môžu byť platené; náhľad sa otvára na jeho stránke.'
+      :'Zatiaľ nemáme priradené noty ani náhľad. Stlač „Hľadať noty / náhľad“ a nájdený odkaz pridaj cez „Upraviť“.';
+    $('scoreOpen').hidden=!link;
+    if(link){$('scoreOpen').href=link;$('scoreOpen').textContent=full?'Otvoriť kompletné noty ↗':'Otvoriť náhľad ↗';}
+    else $('scoreOpen').removeAttribute('href');
+    const pdf=full&&new URL(full).pathname.toLowerCase().endsWith('.pdf');
+    $('scoreToggle').hidden=!pdf;
+    $('scoreToggle').textContent='Zobraziť PDF tu';
+    $('scoreToggle').setAttribute('aria-expanded','false');
+    $('scoreDocument').hidden=true;
+    $('scoreFrame').removeAttribute('src');
+    $('scoreSource').textContent=song?.scoreSource?'Zdroj/licencia: '+song.scoreSource:'';
+    $('scoreSearch').disabled=!song;
+  }
+  function searchScore(song) {
+    const q=song.title+' '+song.artist+' piano sheet music free score official preview';
+    window.open('https://www.google.com/search?q='+encodeURIComponent(q),'_blank','noopener,noreferrer');
+  }
+  $('scoreSearch').addEventListener('click',()=>{
+    const song=songs.find(s=>s.id===selectedId);if(song)searchScore(song);
+  });
+  $('scoreToggle').addEventListener('click',()=>{
+    const song=songs.find(s=>s.id===selectedId);
+    if(!song?.scoreUrl||!new URL(song.scoreUrl).pathname.toLowerCase().endsWith('.pdf'))return;
+    const show=$('scoreDocument').hidden;
+    $('scoreDocument').hidden=!show;
+    if(show)$('scoreFrame').src=song.scoreUrl;
+    else $('scoreFrame').removeAttribute('src');
+    $('scoreToggle').textContent=show?'Skryť PDF':'Zobraziť PDF tu';
+    $('scoreToggle').setAttribute('aria-expanded',String(show));
+  });
   function makeButton(label, onClick, extra='') {
     const b = document.createElement('button');
     b.type = 'button'; b.className = 'button small ' + extra; b.textContent = label; b.addEventListener('click', onClick);
@@ -293,6 +372,11 @@
       tools.append(
         makeButton(LOCAL_FILE ? '▶ YouTube' : '▶ Prehrať',()=>playSong(song.id,true),'primary'),
         makeButton('Iné návody ↗',()=>searchYoutube(song.title+' '+song.artist+' piano tutorial')),
+        makeButton(song.scoreUrl?'♫ Noty zadarmo':song.scorePreviewUrl?'♫ Náhľad nôt':'Hľadať noty',()=>{
+          if(!song.scoreUrl&&!song.scorePreviewUrl){searchScore(song);return;}
+          playSong(song.id);
+          $('scorePanel').scrollIntoView({behavior:'smooth',block:'start'});
+        }),
         makeButton('Upraviť',()=>editSong(song.id)),
         makeButton('Odstrániť',()=>removeSong(song.id),'danger')
       );
@@ -305,6 +389,7 @@
     const song=songs.find(s=>s.id===id);if(!song)return;
     editingId=id;
     $('title').value=song.title; $('artist').value=song.artist; $('url').value=song.url; $('status').value=song.status; $('notes').value=song.notes;
+    $('scoreUrl').value=song.scoreUrl||''; $('scorePreviewUrl').value=song.scorePreviewUrl||''; $('scoreSourceInput').value=song.scoreSource||'';
     $('formTitle').textContent='Upraviť skladbu';$('save').textContent='Uložiť zmeny';$('cancel').hidden=false;
     showMessage('Upravuješ: '+song.title);
     $('songForm').scrollIntoView({behavior:'smooth',block:'center'});
@@ -317,18 +402,18 @@
     if(!confirm('Odstrániť skladbu „'+s.title+'“ zo zoznamu?'))return;
     songs=songs.filter(x=>x.id!==id);
     if(editingId===id)resetForm();
-    if(selectedId===id) {selectedId=null;$('player').replaceChildren();$('player').innerHTML='<div class="player-empty"><span class="big">♫</span><strong>Vyber skladbu zo zoznamu</strong></div>';$('currentTitle').textContent='Žiadna skladba';$('currentArtist').textContent='Vyber skladbu zo zoznamu.';$('openYoutube').hidden=true;}
+    if(selectedId===id) {selectedId=null;$('player').replaceChildren();$('player').innerHTML='<div class="player-empty"><span class="big">♫</span><strong>Vyber skladbu zo zoznamu</strong></div>';$('currentTitle').textContent='Žiadna skladba';$('currentArtist').textContent='Vyber skladbu zo zoznamu.';$('openYoutube').hidden=true;renderScore(null);}
     persist();renderList();showMessage('Skladba bola odstránená.');
   }
   $('songForm').addEventListener('submit', e=>{
     e.preventDefault();
-    const raw={title:$('title').value,artist:$('artist').value,url:$('url').value,status:$('status').value,notes:$('notes').value,id:editingId||newId()};
+    const raw={title:$('title').value,artist:$('artist').value,url:$('url').value,status:$('status').value,notes:$('notes').value,scoreUrl:$('scoreUrl').value,scorePreviewUrl:$('scorePreviewUrl').value,scoreSource:$('scoreSourceInput').value,id:editingId||newId()};
     const s=cleanSong(raw);
     if(!s) {showMessage('Zadaj názov a platný odkaz na konkrétne YouTube video.');return;}
     if(songs.some(x=>x.videoId===s.videoId&&x.id!==editingId)) {showMessage('Toto video už v zozname máš.');return;}
     if(editingId) {const idx=songs.findIndex(x=>x.id===editingId);if(idx<0)return;songs[idx]=s;showMessage('Zmeny boli uložené.');}
     else {songs.push(s);showMessage('Skladba bola pridaná do zoznamu.');}
-    persist();resetForm();renderList();
+    persist();resetForm();if(selectedId===s.id)renderScore(s);renderList();
   });
   function searchYoutube(query) {
     $('ytSearchQuery').value=query;
@@ -372,14 +457,14 @@
       if(!confirm('Import nahradí aktuálny zoznam '+songs.length+' skladieb zoznamom '+incoming.length+' skladieb. Pokračovať?'))return;
       songs=incoming;selectedId=null;resetForm();persist();
       $('player').replaceChildren();$('currentTitle').textContent='Vyber skladbu';$('currentArtist').textContent='Import dokončený.';$('openYoutube').hidden=true;
-      renderList();showMessage('Import dokončený: '+songs.length+' skladieb.');
+      renderScore(null);renderList();showMessage('Import dokončený: '+songs.length+' skladieb.');
     } catch(err) {showMessage('Import sa nepodaril: '+err.message);}
     finally {e.target.value='';}
   });
   $('localNotice').hidden = !LOCAL_FILE;
   if (LOCAL_FILE) $('playerHelp').textContent = 'Na lokálne otvorenej HTML stránke sa videá z bezpečnostných dôvodov otvárajú na YouTube. Zoznam a poznámky môžeš spravovať aj bez zverejnenia stránky.';
   if (selectedId) playSong(selectedId);
-  else renderList();
+  else {renderScore(null);renderList();}
 })();
 </script>
 </body>
