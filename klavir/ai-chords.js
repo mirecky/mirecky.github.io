@@ -78,10 +78,6 @@ button?.addEventListener('click',async()=>{
   inform('Gemini analyzuje YouTube video. Toto môže trvať dlhšie a čerpá kvótu API…','info');
   try{
     const ai=getAI(getApp(),{backend:new GoogleAIBackend()});
-    const model=getGenerativeModel(ai,{
-      model:'gemini-3.6-flash',
-      generationConfig:{temperature:0.15,maxOutputTokens:1400,responseMimeType:'application/json'}
-    });
     const prompt=[
       'You are a careful piano harmonic-analysis assistant.',
       'Analyze the MUSIC ACTUALLY AUDIBLE in the attached YouTube piano tutorial video, not just its title.',
@@ -96,11 +92,35 @@ button?.addEventListener('click',async()=>{
       'confidence (low/medium/high), comment (one short Slovak sentence explaining uncertainties).',
       'Video title for context: '+song.title+'. Composer: '+(song.artist||'unknown')+'.'
     ].join(' ');
-    const result=await model.generateContent([
+    const parts=[
       {fileData:{mimeType:'video/mp4',fileUri:'https://www.youtube.com/watch?v='+song.videoId}},
       prompt
-    ]);
+    ];
+    // Only retry a genuine temporary capacity error. Never auto-retry
+    // quota, authentication, permission or invalid-request errors.
+    const models=['gemini-3.8-flash','gemini-3.5-flash-lite'];
+    let result,usedModel=models[0];
+    for(let attempt=0;attempt<models.length;attempt++){
+      usedModel=models[attempt];
+      if(attempt>0)inform('Hlavný model je dočasne preťažený. Skúšam záložný Gemini Flash-Lite (najviac 2 požiadavky spolu)…','warn');
+      const model=getGenerativeModel(ai,{
+        model:usedModel,
+        generationConfig:{maxOutputTokens:1400,responseMimeType:'application/json'}
+      });
+      try{
+        result=await model.generateContent(parts);
+        break;
+      }catch(error){
+        const message=String(error?.message||'');
+        const transient=/\b(?:500|503)\b|high demand|temporar(?:ily|y)|overload|service unavailable/i.test(message);
+        if(!transient||attempt===models.length-1)throw error;
+      }
+    }
     const proposed=parseResponse(result.response.text());
+    if(usedModel!==models[0]){
+      proposed.comment=('Záložný model Flash-Lite: '+(proposed.comment||'Výsledok treba starostlivo overiť.')).slice(0,220);
+      proposed.confidence='low';
+    }
     const current=ui.getSelectedSong();
     if(current?.id!==song.id||current?.videoId!==song.videoId){
       inform('Medzitým si zmenil skladbu. Spusti analýzu znova na aktuálnom videu.','error');
@@ -116,7 +136,14 @@ button?.addEventListener('click',async()=>{
     }
   }catch(error){
     console.warn('AI chord analysis failed:',error);
-    inform('Technická chyba analýzy: '+(error?.message||'Neznáma chyba pri spracovaní odpovede')+'. Žiadne údaje sa neuložili.','error');
+    const msg=String(error?.message||'Neznáma chyba pri spracovaní odpovede');
+    const overloaded=/\b(?:500|503)\b|high demand|temporar(?:ily|y)|overload|service unavailable/i.test(msg);
+    const quota=/\b429\b|resource.exhausted|quota exceeded|rate limit/i.test(msg);
+    inform(overloaded
+      ? 'Gemini je momentálne preťažený aj pri záložnom pokuse. Žiadne údaje sa neuložili; môžeš skúsiť analýzu neskôr.'
+      :quota
+      ? 'Gemini odmietol požiadavku pre limit kvóty. Neopakujeme ju automaticky. Žiadne údaje sa neuložili.'
+      :'Technická chyba analýzy: '+msg+'. Žiadne údaje sa neuložili.','error');
   }finally{
     busy=false;
     button.disabled=false;
