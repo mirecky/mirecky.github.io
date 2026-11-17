@@ -750,7 +750,15 @@
   const collator=new Intl.Collator('sk',{sensitivity:'base',numeric:true});
   const $ = id => document.getElementById(id);
   let songs = load();
-  let selectedId = songs.length ? songs[0].id : null;
+  const VARIANT_PREFS_KEY='klavir-variant-selection-v1';
+  const variantPrefs=(()=>{
+    try{
+      const stored=JSON.parse(localStorage.getItem(VARIANT_PREFS_KEY)||'{}');
+      return new Map(Object.entries(stored&&typeof stored==='object'&&!Array.isArray(stored)?stored:{}));
+    }catch{return new Map();}
+  })();
+  let selectedId = songs.length
+    ? (songs.find(s=>s.id===variantPrefs.get(workKey(songs[0])))?.id||songs[0].id):null;
   let filter = 'all';
   let sortBy = 'recent';
   let editingId = null;
@@ -924,6 +932,8 @@
     const song = songs.find(s => s.id === id);
     if (!song) return;
     selectedId = id;
+    variantPrefs.set(workKey(song),song.id);
+    try{localStorage.setItem(VARIANT_PREFS_KEY,JSON.stringify(Object.fromEntries(variantPrefs)));}catch{}
     const player = $('player');
     if (LOCAL_FILE) {
       // A file:// or content:// page cannot reliably identify itself to YouTube.
@@ -955,6 +965,7 @@
     }
     $('currentTitle').textContent = song.title;
     $('currentArtist').textContent = song.artist || 'Bez uvedeného autora';
+    renderViewerDifficulty(song);
     $('openYoutube').href = playbackUrl(song);
     updateStartDisplay(song);
     $('openYoutube').hidden = false;
@@ -1261,6 +1272,108 @@
     $('libraryFeedback').textContent=message;
     showMessage(message);
   }
+  function workKey(song) {
+    const label=String(song?.workGroup||song?.title||'');
+    return label.normalize('NFKC').trim().replace(/\s+/g,' ').toLocaleLowerCase('sk');
+  }
+  function groupedSongs(items=songs) {
+    const groups=new Map();
+    for(const song of items){
+      const key=workKey(song);
+      if(!groups.has(key))groups.set(key,{key,label:song.workGroup||song.title,versions:[]});
+      groups.get(key).versions.push(song);
+    }
+    return [...groups.values()];
+  }
+  function groupFor(song){
+    return groupedSongs().find(g=>g.key===workKey(song)) ||
+      {key:workKey(song),label:song.workGroup||song.title,versions:[song]};
+  }
+  function pickVariant(group){
+    const preferred=variantPrefs.get(group.key);
+    const chosen=group.versions.find(s=>s.id===preferred);
+    if(chosen)return chosen;
+    const current=group.versions.find(s=>s.id===selectedId);
+    if(current)return current;
+    return [...group.versions].sort((a,b)=>
+      LEVEL_ORDER[a.difficulty]-LEVEL_ORDER[b.difficulty]||
+      b.addedAt-a.addedAt||collator.compare(a.title,b.title))[0];
+  }
+  function makeDifficultyControl(group,current){
+    const wrap=document.createElement('div');wrap.className='difficulty-control';
+    if(group.versions.length<2){
+      if(current.difficulty){
+        const badge=document.createElement('span');
+        badge.className='difficulty-badge';
+        badge.textContent=DIFFICULTIES[current.difficulty];
+        wrap.append(badge);
+      }
+      return wrap;
+    }
+    const select=document.createElement('select');
+    select.setAttribute('aria-label','Vybrať náročnosť: '+group.label);
+    select.title='Vyber náročnosť a zobrazí sa príslušný videonávod';
+    const sorted=[...group.versions].sort((a,b)=>
+      LEVEL_ORDER[a.difficulty]-LEVEL_ORDER[b.difficulty]||collator.compare(a.title,b.title));
+    const frequencies=new Map();
+    for(const version of sorted)frequencies.set(version.difficulty,(frequencies.get(version.difficulty)||0)+1);
+    for(const version of sorted){
+      const option=document.createElement('option');
+      option.value=version.id;
+      option.textContent=(DIFFICULTIES[version.difficulty]||'NEURČENÁ')+
+        (frequencies.get(version.difficulty)>1?' · '+version.title:'');
+      select.append(option);
+    }
+    select.value=current.id;
+    select.addEventListener('change',()=>{
+      if(songs.some(s=>s.id===select.value))playSong(select.value,false);
+    });
+    wrap.append(select);
+    return wrap;
+  }
+  function renderViewerDifficulty(song){
+    const panel=$('viewerDifficulty');
+    panel.replaceChildren();
+    panel.hidden=!song;
+    if(!song)return;
+    const group=groupFor(song);
+    if(group.versions.length>1){
+      const label=document.createElement('span');
+      label.textContent='Náročnosť:';
+      label.className='muted';
+      label.style.fontSize='12px';
+      panel.append(label);
+    }
+    const selector=makeDifficultyControl(group,song);
+    if(selector.childElementCount)panel.append(selector);
+    const add=document.createElement('button');
+    add.type='button';add.className='button small minimal';
+    add.textContent='+ Ďalšia náročnosť';
+    add.addEventListener('click',()=>addAnotherVersion(song));
+    panel.append(add);
+  }
+  function refreshWorkGroupOptions(){
+    const list=$('existingWorkGroups');
+    list.replaceChildren();
+    groupedSongs().sort((a,b)=>collator.compare(a.label,b.label)).forEach(group=>{
+      const option=document.createElement('option');
+      option.value=group.label;
+      list.append(option);
+    });
+  }
+  function addAnotherVersion(song) {
+    const group=groupFor(song);
+    resetForm();
+    refreshWorkGroupOptions();
+    $('title').value=group.label;
+    $('artist').value=song.artist;
+    $('workGroup').value=group.label;
+    $('difficulty').value='';
+    $('status').value='want';
+    $('dialogTitle').textContent='Pridať inú náročnosť – '+group.label;
+    $('addDialog').showModal();
+    $('url').focus();
+  }
   function sortSongs(items) {
     const list=[...items];
     list.sort((a,b)=>{
@@ -1293,12 +1406,17 @@
   }
   function sortedPinned() {
     const pinned=songs.filter(s=>s.pinned);
-    if(pinned.every(s=>Number.isInteger(s.pinnedOrder))) {
-      return [...pinned].sort((a,b)=>a.pinnedOrder-b.pinnedOrder||
-        (b.addedAt-a.addedAt)||collator.compare(a.title,b.title));
-    }
-    // Existing data from before manual ordering: keep the original order.
-    return sortSongs(pinned);
+    const ordered=pinned.every(s=>Number.isInteger(s.pinnedOrder))
+      ?[...pinned].sort((a,b)=>a.pinnedOrder-b.pinnedOrder||
+        b.addedAt-a.addedAt||collator.compare(a.title,b.title))
+      :sortSongs(pinned);
+    // Each composition occupies a single pinned card even with several tutorials.
+    const seen=new Set();
+    return ordered.filter(s=>{
+      const key=workKey(s);
+      if(seen.has(key))return false;
+      seen.add(key);return true;
+    });
   }
   async function movePinned(sourceId,targetId) {
     if(savingPinnedOrder||sourceId===targetId)return;
@@ -1360,7 +1478,8 @@
   function togglePin(song) {
     if(savingPinnedOrder){libraryMessage('Práve sa ukladá poradie skladieb.');return;}
     const pinned=sortedPinned();
-    if(!song.pinned && pinned.length>=MAX_PINNED) {
+    const groupAnchor=pinned.find(s=>workKey(s)===workKey(song));
+    if(!groupAnchor && pinned.length>=MAX_PINNED) {
       libraryMessage('Môžeš pripnúť najviac 3 skladby. Najprv jednu odopni.');
       return;
     }
@@ -1373,12 +1492,14 @@
   function pinButton(song) {
     const button=document.createElement('button');
     button.type='button';
-    button.className='pin-toggle'+(song.pinned?' pinned':'');
-    button.textContent=song.pinned?'★':'☆';
-    button.title=song.pinned?'Odopnúť skladbu':'Pripnúť medzi tri skladby';
-    button.setAttribute('aria-label',button.title+': '+song.title);
-    button.setAttribute('aria-pressed',String(song.pinned));
-    button.addEventListener('click',()=>togglePin(song));
+    const anchor=sortedPinned().find(s=>workKey(s)===workKey(song));
+    const pinned=Boolean(anchor);
+    button.className='pin-toggle'+(pinned?' pinned':'');
+    button.textContent=pinned?'★':'☆';
+    button.title=pinned?'Odopnúť skladbu':'Pripnúť medzi tri skladby';
+    button.setAttribute('aria-label',button.title+': '+groupFor(song).label);
+    button.setAttribute('aria-pressed',String(pinned));
+    button.addEventListener('click',()=>togglePin(anchor||song));
     return button;
   }
   function statusSelector(song) {
