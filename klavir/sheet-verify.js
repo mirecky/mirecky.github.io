@@ -9,6 +9,9 @@ const ui=window.repertoireApp;
 const openButton=$('theorySheetVerify');
 const tools=$('theorySheetTools');
 const fileInput=$('theorySheetFile');
+const startPageInput=$('theorySheetStartPage');
+const pageCountInput=$('theorySheetPageCount');
+const scopeMessage=$('theorySheetScope');
 const runButton=$('theorySheetRun');
 const status=$('theorySheetStatus');
 const source=$('theorySheetSource');
@@ -20,6 +23,44 @@ const discardButton=$('theorySheetDiscard');
 const MAX_PDF_BYTES=12*1024*1024;
 const allowedRoots=new Set(['C','C#','D','Eb','E','F','F#','G','Ab','A','Bb','B']);
 let working=false,proposal=null;
+let pdfLibPromise=null;
+async function getPdfLibrary(){
+  if(window.PDFLib?.PDFDocument)return window.PDFLib;
+  if(!pdfLibPromise){
+    pdfLibPromise=new Promise((resolve,reject)=>{
+      const script=document.createElement('script');
+      script.src='https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js';
+      script.crossOrigin='anonymous';
+      script.onload=()=>window.PDFLib?.PDFDocument
+        ?resolve(window.PDFLib)
+        :reject(Error('Knižnica na výber strán PDF sa nenačítala.'));
+      script.onerror=()=>reject(Error('Nepodarilo sa načítať knižnicu na lokálny výber strán PDF. Skontroluj blokovanie CDN v Brave.'));
+      document.head.append(script);
+    }).catch(error=>{pdfLibPromise=null;throw error;});
+  }
+  return pdfLibPromise;
+}
+async function selectPdfPages(file){
+  const {PDFDocument}=await getPdfLibrary();
+  const sourcePdf=await PDFDocument.load(await file.arrayBuffer());
+  const totalPages=sourcePdf.getPageCount();
+  if(!totalPages)throw Error('PDF neobsahuje žiadnu stranu.');
+  const start=Number(startPageInput.value||1);
+  const count=Number(pageCountInput.value||2);
+  if(!Number.isInteger(start)||start<1||start>totalPages){
+    throw Error('Zadaj začiatok rozsahu od 1 do '+totalPages+'.');
+  }
+  if(![1,2,4].includes(count))throw Error('Nepodporovaný počet analyzovaných strán.');
+  const end=Math.min(totalPages,start+count-1);
+  const out=await PDFDocument.create();
+  const indices=Array.from({length:end-start+1},(_,i)=>start-1+i);
+  const selected=await out.copyPages(sourcePdf,indices);
+  selected.forEach(page=>out.addPage(page));
+  const bytes=await out.save({useObjectStreams:true});
+  const selectedBlob=new Blob([bytes],{type:'application/pdf'});
+  await validatePdf(selectedBlob);
+  return {file:selectedBlob,scope:{start,end,totalPages,complete:start===1&&end===totalPages}};
+}
 function say(message,state='info'){status.textContent=message;status.dataset.state=state;}
 function cleanChords(raw){
   return [...new Set((Array.isArray(raw)?raw:[])
@@ -69,18 +110,21 @@ function sameSong(song,initial){
   return !!song && song.id===initial.id && song.videoId===initial.videoId &&
     (song.scoreUrl||'')===initial.scoreUrl;
 }
-function showProposal(result,song,sourceType,sourceUrl,usedModel,failReason){
+function showProposal(result,song,sourceType,sourceUrl,usedModel,failReason,scope){
   resetProposal();
   proposal={...result,id:song.id,videoId:song.videoId,scoreUrl:song.scoreUrl||'',
-    sourceType,sourceUrl,usedModel,failReason};
+    sourceType,sourceUrl,usedModel,failReason,scope};
   const headline=result.keyRoot
     ? 'Tónina podľa nôt: '+result.keyRoot.replace(/#/g,'♯').replace(/b/g,'♭')+' '+(result.keyMode==='minor'?'mol':'dur')
     : 'Tónina podľa PDF sa nepodarila spoľahlivo určiť';
   const heading=document.createElement('strong');heading.textContent=headline;
   proposalContent.append(heading);
+  para('Analyzované strany PDF: '+scope.start+'–'+scope.end+' z '+scope.totalPages+
+    (scope.complete?'. Spracovaný bol celý dokument.':'. Toto je iba časť dokumentu, nie overenie celej skladby.'),
+    scope.complete?'':'theory-warning');
   para(result.chords.length
-    ? 'Akordy prečítané z nôt (AI odhad): '+result.chords.join(', ').replace(/#/g,'♯')
-    : 'V PDF sa nepodarilo spoľahlivo rozpoznať akordy.');
+    ? 'Akordy navrhnuté zo zvolených strán (AI odhad): '+result.chords.join(', ').replace(/#/g,'♯')
+    : 'Na vybraných stranách sa nepodarilo spoľahlivo rozpoznať akordy.');
   const video=splitChords(song.analysisChords);
   if(video.length&&result.chords.length){
     const match=compareChords(result.chords,video);
@@ -171,12 +215,18 @@ runButton?.addEventListener('click',async()=>{
   try{
     say('Pripravujem PDF notový zápis…');
     const input=await getPdf(song);
-    const pdf=await pdfToInline(input.file);
-    say('Gemini číta noty a pripravuje návrh akordov. Jedna analýza využíva kvótu API…');
+    say('Vyberám len požadované strany PDF priamo v prehliadači…');
+    const clipped=await selectPdfPages(input.file);
+    const pdf=await pdfToInline(clipped.file);
+    say('Gemini analyzuje strany '+clipped.scope.start+'–'+clipped.scope.end+' z '+
+      clipped.scope.totalPages+'. Odosielame len tento výsek, aby sa znížila záťaž…');
     const ai=getAI(getApp(),{backend:new GoogleAIBackend()});
     const prompt=[
       'You are a conservative music notation analyst reading the ATTACHED PIANO SHEET MUSIC PDF.',
-      'Determine the key signature and actual chord sonorities grounded in the WRITTEN NOTES of the score.',
+      'Determine the key signature and actual chord sonorities grounded in the WRITTEN NOTES of the attached excerpt.',
+      'IMPORTANT: This PDF contains ONLY pages '+clipped.scope.start+' to '+clipped.scope.end+
+        ' of '+clipped.scope.totalPages+' of the original score. Analyze ONLY these pages.',
+      'Do not claim to analyze the whole composition or movement when only an excerpt was supplied.',
       'Analyze the musical composition or movement matching the provided title, not unrelated works in the document.',
       'Use the written score as the evidence. Do NOT invent chords from just its title or key signature.',
       'If the score is illegible, incomplete or an unrelated movement, return an empty chord list and comment explaining why.',
@@ -193,15 +243,18 @@ runButton?.addEventListener('click',async()=>{
     let response,modelUsed=models[0],fallbackReason='';
     for(let i=0;i<models.length;i++){
       modelUsed=models[i];
-      if(i) say('Hlavný model bol preťažený ('+fallbackReason+'). Skúšam záložný Flash-Lite…','warn');
+      if(i) say('Hlavný model nedokončil požiadavku ('+fallbackReason+
+        '). Skúšam záložný Gemini Flash-Lite na rovnakých stranách…','warn');
       const model=getGenerativeModel(ai,{model:modelUsed,
         generationConfig:{maxOutputTokens:1600,responseMimeType:'application/json'}});
       try{response=await model.generateContent([pdf,prompt]);break;}
       catch(error){
         const detail=String(error?.message||'');
-        const temporary=/\b(?:500|503)\b|high demand|overload|temporar(?:ily|y)|service unavailable/i.test(detail);
+        const timedOut=/timeout|timed out|deadline exceeded|time limit/i.test(detail);
+        const temporary=/\b(?:500|503)\b|high demand|overload|temporar(?:ily|y)|service unavailable/i.test(detail)||timedOut;
         if(!temporary||i===models.length-1)throw error;
-        fallbackReason=/\b(500|503)\b/.exec(detail)?.[1]||'dočasné preťaženie';
+        fallbackReason=timedOut?'časový limit prekročený':
+          (/\b(500|503)\b/.exec(detail)?.[1]?'HTTP '+/\b(500|503)\b/.exec(detail)[1]:'dočasné preťaženie');
       }
     }
     const result=parseOutput(response.response.text());
@@ -210,12 +263,16 @@ runButton?.addEventListener('click',async()=>{
       say('Skladba alebo odkaz na noty sa medzitým zmenili; rozbor neukladáme.','error');
       return;
     }
-    showProposal(result,song,input.type,input.url,modelUsed,fallbackReason);
+    showProposal(result,song,input.type,input.url,modelUsed,fallbackReason,clipped.scope);
     if(result.chords.length) say('Návrh podľa PDF je pripravený. Skontroluj rozdiely a až potom ho ulož.','saved');
     else say('Gemini PDF spracovalo, no akordy nedokázalo spoľahlivo prečítať. Návrh sa nedá uložiť.','warn');
   }catch(error){
     console.warn('Score analysis failed:',error);
-    say('Overenie nôt sa nepodarilo: '+String(error?.message||'Neznáma chyba')+'. Nič sa neuložilo.','error');
+    const errorText=String(error?.message||'Neznáma chyba');
+    const timeout=/timeout|timed out|deadline exceeded|time limit/i.test(errorText);
+    say(timeout
+      ?'Gemini nedokončil analýzu ani vo vybranom rozsahu strán (časový limit). Skús jednu stranu alebo orientačný lokálny výpočet z MusicXML. Nič sa neuložilo.'
+      :'Overenie nôt sa nepodarilo: '+errorText+'. Nič sa neuložilo.','error');
   }finally{working=false;runButton.disabled=false;}
 });
 saveButton?.addEventListener('click',async()=>{
@@ -236,7 +293,9 @@ saveButton?.addEventListener('click',async()=>{
         sourceType:proposal.sourceType,sourceUrl:proposal.sourceUrl,
         comparedVideoId:proposal.videoId,
         confidence:proposal.confidence,model:proposal.usedModel,
-        comment:proposal.comment,analyzedAt:Date.now()
+        comment:proposal.comment,analyzedAt:Date.now(),
+        scopeStart:proposal.scope.start,scopeEnd:proposal.scope.end,
+        scopeTotal:proposal.scope.totalPages,scopeComplete:proposal.scope.complete
       }
     });
     resetProposal();
@@ -250,9 +309,13 @@ fileInput?.addEventListener('change',()=>{
   resetProposal();
   if(fileInput.files?.[0])say('Vybrané PDF: '+fileInput.files[0].name+'. Klikni na „Analyzovať notový zápis“.');
 });
+startPageInput?.addEventListener('change',resetProposal);
+pageCountInput?.addEventListener('change',resetProposal);
 document.addEventListener('klavir:song-selected',()=>{
   tools.hidden=true;
   fileInput.value='';
+  startPageInput.value='1';
+  pageCountInput.value='2';
   resetProposal();
   say('');
 });
