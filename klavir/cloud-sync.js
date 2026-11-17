@@ -2,7 +2,7 @@
 // Firebase webova konfiguracia je verejna. Pristup k udajom riadia Firestore Rules.
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/13.4.0/firebase-app.js';
 import { getAuth, GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut } from 'https://www.gstatic.com/firebasejs/13.4.0/firebase-auth.js';
-import { getFirestore, collection, doc, onSnapshot, setDoc, deleteDoc, writeBatch } from 'https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js';
+import { getFirestore, collection, doc, onSnapshot, setDoc, deleteDoc, writeBatch, runTransaction } from 'https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js';
 
 const firebaseConfig = {
   apiKey: 'AIzaSyA_dnstUaHkzu87jkpjfhd2PE8gfytIbEs',
@@ -71,8 +71,13 @@ function recomputeTransfer() {
     transferButton.hidden = true;
     return;
   }
-  const inCloud = new Set(cloudSongs.map(x => x.videoId));
-  missingLocalSongs = ui.getLocalSongs().filter(s => !inCloud.has(s.videoId));
+  // An edit can change videoId, but not a song's stable document ID.
+  // Never offer to migrate a stale local copy over an existing cloud song.
+  const cloudIds = new Set(cloudSongs.map(x => x.id));
+  const cloudVideos = new Set(cloudSongs.map(x => x.videoId));
+  missingLocalSongs = ui.getLocalSongs().filter(
+    s => !cloudIds.has(s.id) && !cloudVideos.has(s.videoId)
+  );
   transferButton.hidden = missingLocalSongs.length === 0;
   if (missingLocalSongs.length) {
     transferButton.textContent = 'Preniest miestne skladby (' + missingLocalSongs.length + ')';
@@ -177,9 +182,20 @@ transferButton.addEventListener('click', async () => {
   transferButton.disabled = true;
   try {
     status('Prenasam miestne skladby...', 'warn');
-    await commitOperations(toTransfer.map(song => ({ type: 'set', song })));
-    status('Prenos sa podaril.', 'saved');
-    ui.showMessage('Miestne skladby boli prenesene do cloudu.');
+    let added = 0;
+    for (const song of toTransfer) {
+      // Atomic create-only: if the same document now exists, leave it intact.
+      const created = await runTransaction(db, async transaction => {
+        const ref = songRef(song.id);
+        const existing = await transaction.get(ref);
+        if (existing.exists()) return false;
+        transaction.set(ref, song);
+        return true;
+      });
+      if (created) added++;
+    }
+    status('Prenos dokončený. Nové skladby: ' + added, 'saved');
+    ui.showMessage('Prenesených nových skladieb: ' + added + '. Existujúce cloudové skladby zostali nezmenené.');
   } catch (error) {
     status('Prenos sa nepodaril: ' + readableError(error), 'error');
     ui.showMessage('Prenos sa nepodaril. Miestne skladby zostali zachovane.');
