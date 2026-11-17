@@ -312,6 +312,8 @@
     .theory-ai-draft {background:#171c25;border:1px solid #5d5144;border-radius:10px;margin-top:11px;padding:12px;}
     .theory-ai-draft strong {font-size:13px;}
     .theory-ai-draft p {line-height:1.55;}
+    .theory-ai-fallback {color:var(--gold)!important;background:#29261f;border-left:3px solid var(--gold);padding:8px 10px;border-radius:5px;}
+    .theory-saved-model {font-size:12px;color:var(--muted);margin:8px 0 0;line-height:1.5;}
     .theory-ai-draft-actions {display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;}
   </style>
 </head>
@@ -440,6 +442,7 @@
           <div class="theory-intro">
             <strong id="theoryKeyTitle">Tónina nie je určená</strong>
             <p id="theoryIntroText">Po výbere tóniny sa automaticky vygenerujú stupnica a akordy.</p>
+            <p id="theorySavedModel" class="theory-saved-model" hidden></p>
           </div>
           <div id="theoryUnknown" class="theory-empty" hidden>
             Tónina aranžmánu zatiaľ nie je známa. Otvor „Upraviť“ a v časti „Hudobný rozbor“ ju nastav. Z názvu ani YouTube odkazu ju nemožno spoľahlivo zistiť.
@@ -644,6 +647,9 @@
       keyRoot, keyMode,
       analysisChords:typeof s.analysisChords==='string'?s.analysisChords.trim().slice(0,300):'',
       analysisSource:s.analysisSource==='ai'?'ai':'',
+      analysisModel:['gemini-3.8-flash','gemini-3.5-flash-lite'].includes(s.analysisModel)?s.analysisModel:'',
+      analysisFallbackCode:[500,503].includes(Number(s.analysisFallbackCode))?Number(s.analysisFallbackCode):0,
+      analysisFallbackReason:typeof s.analysisFallbackReason==='string'?s.analysisFallbackReason.trim().slice(0,140):'',
 
       notes:typeof s.notes === 'string' ? s.notes.trim().slice(0,500) : '',
       scoreUrl:scoreLink(s.scoreUrl)||(isMoonlightScore?MOONLIGHT_SCORE:''),
@@ -809,6 +815,15 @@
     $('theoryIntroText').textContent=known?
       'Stupnica a jej základné akordy sa počítajú automaticky. Skutočné akordy sa môžu líšiť podľa aranžmánu.':
       'Najprv potrebujeme overiť tóninu konkrétneho aranžmánu.';
+    const savedModel=$('theorySavedModel');
+    savedModel.hidden=!(song?.analysisSource==='ai'&&song.analysisModel);
+    if(!savedModel.hidden){
+      const label=song.analysisModel==='gemini-3.5-flash-lite'?'Gemini 3.5 Flash-Lite':'Gemini 3.8 Flash';
+      savedModel.textContent='Uložený rozbor – model: '+label+
+        (song.analysisFallbackReason
+          ? '. Dôvod prepnutia: '+(song.analysisFallbackCode?'HTTP '+song.analysisFallbackCode+' – ':'')+song.analysisFallbackReason+'.'
+          : '. Záložný model nebol potrebný.');
+    }
     currentTheoryChords=[];
     $('theoryTones').replaceChildren();
     $('theoryChords').replaceChildren();
@@ -1124,7 +1139,7 @@
   $('songForm').addEventListener('submit', async e=>{
     e.preventDefault();
     const previous=editingId?songs.find(x=>x.id===editingId):null;
-    const raw={title:$('title').value,artist:$('artist').value,url:$('url').value,status:$('status').value,startSeconds:$('startSeconds').value,analysisSource:previous?.analysisChords===$('analysisChords').value.trim()?previous?.analysisSource:'',notes:$('notes').value,scoreUrl:$('scoreUrl').value,scorePreviewUrl:$('scorePreviewUrl').value,scoreSource:$('scoreSourceInput').value,keyRoot:$('keyRoot').value,keyMode:$('keyMode').value,analysisChords:$('analysisChords').value,pinned:previous?.pinned??false,addedAt:previous?.addedAt??Date.now(),id:editingId||newId()};
+    const raw={title:$('title').value,artist:$('artist').value,url:$('url').value,status:$('status').value,startSeconds:$('startSeconds').value,analysisSource:previous?.analysisChords===$('analysisChords').value.trim()&&previous?.videoId===videoIdFromUrl($('url').value)?previous?.analysisSource:'',analysisModel:previous?.analysisChords===$('analysisChords').value.trim()&&previous?.videoId===videoIdFromUrl($('url').value)?previous?.analysisModel:'',analysisFallbackCode:previous?.analysisChords===$('analysisChords').value.trim()&&previous?.videoId===videoIdFromUrl($('url').value)?previous?.analysisFallbackCode:0,analysisFallbackReason:previous?.analysisChords===$('analysisChords').value.trim()&&previous?.videoId===videoIdFromUrl($('url').value)?previous?.analysisFallbackReason:'',notes:$('notes').value,scoreUrl:$('scoreUrl').value,scorePreviewUrl:$('scorePreviewUrl').value,scoreSource:$('scoreSourceInput').value,keyRoot:$('keyRoot').value,keyMode:$('keyMode').value,analysisChords:$('analysisChords').value,pinned:previous?.pinned??false,addedAt:previous?.addedAt??Date.now(),id:editingId||newId()};
     const s=cleanSong(raw);
     if(!s) {showMessage('Zadaj názov a platný odkaz na konkrétne YouTube video.');return;}
     if(songs.some(x=>x.videoId===s.videoId&&x.id!==editingId)) {showMessage('Toto video už v zozname máš.');return;}
@@ -1297,7 +1312,10 @@
       const next=cleanSong({...song,
         keyRoot:proposal.keyRoot||song.keyRoot||'',
         keyMode:proposal.keyMode||song.keyMode||'',
-        analysisChords:proposal.analysisChords,analysisSource:'ai'
+        analysisChords:proposal.analysisChords,analysisSource:'ai',
+        analysisModel:proposal.analysisModel||'',
+        analysisFallbackCode:proposal.analysisFallbackCode||0,
+        analysisFallbackReason:proposal.analysisFallbackReason||''
       });
       await window.cloudSync.save(next);
     },
@@ -1314,6 +1332,6 @@
 </script>
 <script src="./video-metadata.js?v=3" defer></script>
 <script type="module" src="./cloud-sync.js?v=3"></script>
-<script type="module" src="./ai-chords.js?v=3"></script>
+<script type="module" src="./ai-chords.js?v=4"></script>
 </body>
 </html>
