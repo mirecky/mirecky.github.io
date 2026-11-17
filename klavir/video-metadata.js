@@ -106,6 +106,11 @@
       const metadata = metadataFromTitle(data.title);
       if (overwrite || titleField.value === startingTitle) titleField.value = metadata.title;
       if (overwrite || composerField.value === startingComposer) composerField.value = metadata.composer;
+      // The displayed title may have "EASY piano tutorial" stripped.
+      // Pass the ORIGINAL video title so the repertoire can detect its level.
+      document.dispatchEvent(new CustomEvent('klavir:video-metadata',{
+        detail:{videoId,title:data.title,displayTitle:metadata.title}
+      }));
       setMessage(metadata.composer
         ? 'Názov a skladateľ doplnené; môžeš ich upraviť.'
         : 'Názov doplnený. Skladateľ nie je potvrdený — doplň ho ručne. YouTube kanál: ' + (data.channel || 'neuvedený'),
