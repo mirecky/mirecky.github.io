@@ -677,7 +677,7 @@
               <datalist id="existingWorkGroups"></datalist>
             </div>
           </div>
-          <p class="difficulty-field-help">Rovnaký spoločný názov združí rôzne videonávody pod jednu skladbu. Každá náročnosť môže mať vlastné video, noty a akordy. Ak názov skupiny nezadáš, použije sa názov skladby.</p>
+          <p class="difficulty-field-help">Ak názov videa obsahuje označenie EASY, MEDIUM alebo PROFI, aplikácia ho automaticky rozpozná. Rovnaký spoločný názov združí náročnosti pod jednu skladbu. Každá verzia má vlastné video, noty a akordy; názov skupiny môžeš opraviť ručne.</p>
           <details class="advanced-fields" id="advancedFields">
             <summary>Hudobný rozbor, noty a poznámky <span>(nepovinné)</span></summary>
             <div class="advanced-inner">
@@ -823,6 +823,10 @@
   function inferTitleVariant(value) {
     const original=String(value||'').normalize('NFKC').trim().replace(/\s+/g,' ');
     let label=original,detected='';
+    // Common YouTube form: "Pink Panther EASY | Piano Tutorial".
+    if(/\b(?:EASY|MEDIUM|PROFI)\b/.test(original)){
+      label=label.replace(/\s*[|–—:]\s*(?:(?:piano|keyboard)\s+)?(?:tutorial|lesson|cover|synthesia)\s*$/i,'').trim();
+    }
     const patterns=[
       /^\s*(easy|medium|profi)\s*(?:(?:piano|keyboard|tutorial|lesson|version)\s*)*[-–—:|]\s*/i,
       /\s*[\[(]\s*(easy|medium|profi)(?:\s+(?:piano|keyboard|tutorial|lesson|cover|version|arrangement|level|synthesia))*\s*[\])]\s*/gi,
@@ -839,6 +843,7 @@
     if(detected&&label){
       label=label.replace(/\s*[\[(](?:piano tutorial|tutorial|piano cover|synthesia)[\])]\s*$/i,'')
         .replace(/\s*[-–—|:]\s*(?:piano tutorial|tutorial|piano cover|synthesia)\s*$/i,'')
+        .replace(/\s+(?:piano tutorial|piano cover|tutorial|synthesia)\s*$/i,'')
         .trim().replace(/\s+/g,' ');
     }
     return {difficulty:label?detected:'',workGroup:label||original};
@@ -1706,7 +1711,7 @@
   function autoFillDifficultyFromTitle(titleText){
     if(!$('addDialog').open)return;
     const info=inferTitleVariant(titleText);
-    if(info.difficulty&&!levelEditedManually)$('difficulty').value=info.difficulty;
+    if(!levelEditedManually)$('difficulty').value=info.difficulty||'';
     if(!groupEditedManually && info.workGroup && (!$('workGroup').value.trim()||
        $('workGroup').value.trim()===autoGroupSuggestion)){
       $('workGroup').value=info.workGroup;
@@ -1994,7 +1999,7 @@
   else {renderScore(null);renderList();}
 })();
 </script>
-<script src="./video-metadata.js?v=3" defer></script>
+<script src="./video-metadata.js?v=4" defer></script>
 <script type="module" src="./cloud-sync.js?v=4"></script>
 <script type="module" src="./ai-chords.js?v=4"></script>
 <script type="module" src="./sheet-verify.js?v=2"></script>
