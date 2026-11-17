@@ -288,6 +288,16 @@
     .theory-empty {font-size:13px;color:var(--muted);}
     .theory-summary-title {display:flex;align-items:center;gap:8px;}
     .theory-summary-title svg {color:var(--gold);}
+    .start-settings {background:#1b222c;border:1px solid #3c4555;padding:12px;border-radius:10px;}
+    .start-settings label {display:flex;gap:12px;align-items:center;justify-content:space-between;}
+    .start-preview {font-size:13px;font-weight:700;color:var(--gold);}
+    .start-controls {display:flex;align-items:center;gap:14px;margin:10px 0 6px;}
+    .start-controls input[type="range"] {min-width:0;flex:1;padding:0;accent-color:var(--gold);cursor:pointer;}
+    .start-number {flex:none;display:flex;align-items:center;gap:6px;}
+    .start-number input {width:81px;min-width:0;text-align:right;padding:8px;}
+    .start-number span {font-size:12px;color:var(--muted);}
+    .now .current-start {color:var(--gold);font-size:12px;margin-top:4px;}
+    @media(max-width:550px){.start-controls{gap:8px;}.start-number input{width:73px;}}
   </style>
 </head>
 <body>
@@ -375,7 +385,7 @@
       <p class="local-notice" id="localNotice" hidden>Stránka je otvorená z telefónu ako lokálny súbor. YouTube tu blokuje vložený prehrávač (chyba 153). Videá preto otvoríš jedným kliknutím na YouTube. Ak stránku umiestnime na HTTPS, video sa môže prehrávať priamo tu.</p>
       <div class="player" id="player"><div class="player-empty"><span class="big">♫</span><strong>Vyber skladbu zo zoznamu</strong><p>Videonávod sa zobrazí tu.</p></div></div>
       <div class="now">
-        <div><h3 id="currentTitle">Žiadna skladba</h3><p id="currentArtist">Vyber si skladbu napravo.</p></div>
+        <div><h3 id="currentTitle">Žiadna skladba</h3><p id="currentArtist">Vyber si skladbu napravo.</p><p id="currentStartTime" class="current-start" hidden></p></div>
         <div class="viewer-actions">
           <a class="button small" id="openYoutube" href="https://www.youtube.com/" target="_blank" rel="noopener noreferrer" hidden>Otvoriť na YouTube ↗</a>
           <button class="button small" id="currentEdit" type="button" hidden>Upraviť</button>
@@ -464,6 +474,14 @@
           <div class="field"><label for="title">Názov skladby *</label><input id="title" name="title" required maxlength="150" placeholder="Napr. Comptine d’un autre été"></div>
           <div class="field"><label for="artist">Autor / skladateľ</label><input id="artist" name="artist" maxlength="120" placeholder="Napr. Yann Tiersen"></div>
           <div class="field"><label for="url">Odkaz na YouTube *</label><input id="url" name="url" required type="url" placeholder="https://youtu.be/…"><small>Podporované: youtube.com/watch, youtu.be, shorts, live a embed odkazy.</small></div>
+          <div class="field start-settings">
+            <label for="startSeconds">Prehrávať od <span id="startPreview" class="start-preview">0:00</span></label>
+            <div class="start-controls">
+              <input id="startSlider" type="range" min="0" max="600" step="1" value="0" aria-label="Začiatok videa – posuvník">
+              <div class="start-number"><input id="startSeconds" name="startSeconds" type="number" min="0" max="86400" step="1" inputmode="numeric" value="0" aria-label="Začiatok videa v sekundách"><span>s</span></div>
+            </div>
+            <small>0 = od začiatku. Posuvník nastaví prvých 10 minút; pre dlhšie videá môžeš zadať sekundy ručne.</small>
+          </div>
           <div class="field"><label for="status">Stav učenia</label><select id="status" name="status"><option value="want">Chcem hrať</option><option value="learning">Učím sa</option><option value="learned">Zvládnuté</option></select></div>
           <details class="advanced-fields" id="advancedFields">
             <summary>Hudobný rozbor, noty a poznámky <span>(nepovinné)</span></summary>
@@ -542,6 +560,43 @@
     try {const url=new URL(s.trim());return ['https:','http:'].includes(url.protocol)?url.href:'';}
     catch{return '';}
   }
+  function normalizeStartSeconds(value) {
+    const n=Number(value);
+    return Number.isFinite(n) ? Math.max(0,Math.min(86400,Math.trunc(n))) : 0;
+  }
+  function formatStartSeconds(value) {
+    const seconds=normalizeStartSeconds(value);
+    const hh=Math.floor(seconds/3600);
+    const mm=Math.floor((seconds%3600)/60);
+    const ss=seconds%60;
+    return hh>0 ? hh+':'+String(mm).padStart(2,'0')+':'+String(ss).padStart(2,'0')
+      : mm+':'+String(ss).padStart(2,'0');
+  }
+  function playbackUrl(song) {
+    const result=new URL(song.url);
+    if(song.startSeconds>0)result.searchParams.set('t',song.startSeconds+'s');
+    return result.href;
+  }
+  function updateStartDisplay(song) {
+    const el=$('currentStartTime');
+    el.hidden=!song || !song.startSeconds;
+    el.textContent=song?.startSeconds ? 'Prehrávanie od '+formatStartSeconds(song.startSeconds) : '';
+  }
+  function syncStartControls(value) {
+    const seconds=normalizeStartSeconds(value);
+    $('startSeconds').value=String(seconds);
+    const slider=$('startSlider');
+    slider.max=String(Math.max(600,seconds));
+    slider.value=String(seconds);
+    $('startPreview').textContent=formatStartSeconds(seconds);
+  }
+  $('startSlider').addEventListener('input',event=>syncStartControls(event.target.value));
+  $('startSeconds').addEventListener('input',event=>{
+    if(event.target.value==='')return;
+    const n=Number(event.target.value);
+    if(Number.isFinite(n)&&n>=0&&n<=86400)syncStartControls(n);
+  });
+  $('startSeconds').addEventListener('change',event=>syncStartControls(event.target.value));
   function cleanSong(s) {
     if (!s || typeof s !== 'object' || typeof s.title !== 'string' || typeof s.url !== 'string') return null;
     const videoId = videoIdFromUrl(s.url);
@@ -558,6 +613,7 @@
       url:'https://www.youtube.com/watch?v=' + videoId,
       videoId,
       status:statuses[s.status] ? s.status : 'want',
+      startSeconds:normalizeStartSeconds(s.startSeconds),
       pinned:typeof s.pinned==='boolean' ? s.pinned : (videoId==='YdWK3qsDyXA'||videoId==='wQuBfKikBq0'),
       addedAt:Number.isSafeInteger(s.addedAt)&&s.addedAt>=0 ? s.addedAt : 0,
       keyRoot, keyMode,
@@ -616,7 +672,7 @@
       img.src = 'https://i.ytimg.com/vi/' + song.videoId + '/hqdefault.jpg';
       img.alt = ''; img.loading = 'lazy';
       const title = document.createElement('strong'); title.textContent = song.title;
-      const link = document.createElement('a'); link.href = song.url;
+      const link = document.createElement('a'); link.href = playbackUrl(song);
       link.target = '_blank'; link.rel = 'noopener noreferrer';
       link.textContent = '▶ Prehrať na YouTube ↗';
       const note = document.createElement('p');
@@ -624,10 +680,12 @@
       poster.append(img,title,link,note);
       player.replaceChildren(poster);
       // This executes directly in the click handler, so browsers permit the new tab.
-      if (userInitiated) window.open(song.url, '_blank', 'noopener,noreferrer');
+      if (userInitiated) window.open(playbackUrl(song), '_blank', 'noopener,noreferrer');
     } else {
       const frame = document.createElement('iframe');
-      frame.src = 'https://www.youtube-nocookie.com/embed/' + encodeURIComponent(song.videoId) + '?rel=0&autoplay=' + (userInitiated ? '1' : '0');
+      frame.src = 'https://www.youtube-nocookie.com/embed/' + encodeURIComponent(song.videoId) +
+        '?rel=0&autoplay=' + (userInitiated ? '1' : '0') +
+        (song.startSeconds>0 ? '&start='+song.startSeconds : '');
       frame.title = 'Videonávod: ' + song.title;
       frame.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share';
       frame.referrerPolicy = 'strict-origin-when-cross-origin';
@@ -636,7 +694,8 @@
     }
     $('currentTitle').textContent = song.title;
     $('currentArtist').textContent = song.artist || 'Bez uvedeného autora';
-    $('openYoutube').href = song.url;
+    $('openYoutube').href = playbackUrl(song);
+    updateStartDisplay(song);
     $('openYoutube').hidden = false;
     $('currentEdit').hidden=false;
     $('currentRemove').hidden=false;
@@ -989,6 +1048,7 @@
     $('title').value=song.title; $('artist').value=song.artist; $('url').value=song.url; $('status').value=song.status; $('notes').value=song.notes;
     $('scoreUrl').value=song.scoreUrl||''; $('scorePreviewUrl').value=song.scorePreviewUrl||''; $('scoreSourceInput').value=song.scoreSource||'';
     $('keyRoot').value=song.keyRoot||''; $('keyMode').value=song.keyMode||''; $('analysisChords').value=song.analysisChords||'';
+    syncStartControls(song.startSeconds||0);
 
     $('formTitle').textContent='Upraviť skladbu';$('save').textContent='Uložiť zmeny';$('cancel').hidden=false;
     $('dialogTitle').textContent='Upraviť skladbu';
@@ -997,7 +1057,7 @@
     $('addDialog').showModal();
   }
   function resetForm() {
-    editingId=null;$('songForm').reset();$('formTitle').textContent='Pridať skladbu';$('dialogTitle').textContent='Pridať skladbu';$('save').textContent='Pridať do zoznamu';$('cancel').hidden=true;$('advancedFields').open=false;
+    editingId=null;$('songForm').reset();syncStartControls(0);$('formTitle').textContent='Pridať skladbu';$('dialogTitle').textContent='Pridať skladbu';$('save').textContent='Pridať do zoznamu';$('cancel').hidden=true;$('advancedFields').open=false;
   }
   async function removeSong(id) {
     const s=songs.find(x=>x.id===id);if(!s)return;
@@ -1016,7 +1076,7 @@
   $('songForm').addEventListener('submit', async e=>{
     e.preventDefault();
     const previous=editingId?songs.find(x=>x.id===editingId):null;
-    const raw={title:$('title').value,artist:$('artist').value,url:$('url').value,status:$('status').value,notes:$('notes').value,scoreUrl:$('scoreUrl').value,scorePreviewUrl:$('scorePreviewUrl').value,scoreSource:$('scoreSourceInput').value,keyRoot:$('keyRoot').value,keyMode:$('keyMode').value,analysisChords:$('analysisChords').value,pinned:previous?.pinned??false,addedAt:previous?.addedAt??Date.now(),id:editingId||newId()};
+    const raw={title:$('title').value,artist:$('artist').value,url:$('url').value,status:$('status').value,startSeconds:$('startSeconds').value,notes:$('notes').value,scoreUrl:$('scoreUrl').value,scorePreviewUrl:$('scorePreviewUrl').value,scoreSource:$('scoreSourceInput').value,keyRoot:$('keyRoot').value,keyMode:$('keyMode').value,analysisChords:$('analysisChords').value,pinned:previous?.pinned??false,addedAt:previous?.addedAt??Date.now(),id:editingId||newId()};
     const s=cleanSong(raw);
     if(!s) {showMessage('Zadaj názov a platný odkaz na konkrétne YouTube video.');return;}
     if(songs.some(x=>x.videoId===s.videoId&&x.id!==editingId)) {showMessage('Toto video už v zozname máš.');return;}
@@ -1035,7 +1095,12 @@
     }
     if(editingId) {const idx=songs.findIndex(x=>x.id===editingId);if(idx<0)return;songs[idx]=s;showMessage('Zmeny boli uložené.');}
     else {songs.push(s);showMessage('Skladba bola pridaná do zoznamu.');}
-    persist();resetForm();$('addDialog').close();if(selectedId===s.id){renderScore(s);renderTheory(s);}renderList();
+    persist();resetForm();$('addDialog').close();
+    if(selectedId===s.id) {
+      if(previous && (previous.videoId!==s.videoId || previous.startSeconds!==s.startSeconds)) playSong(s.id);
+      else {renderScore(s);renderTheory(s);}
+    }
+    renderList();
   });
   function pianoTutorialQuery(query) {
     const trimmed=String(query||'').trim();
@@ -1129,6 +1194,7 @@
     $('player').innerHTML='<div class="player-empty"><span class="big">♫</span><strong>Vyber skladbu zo zoznamu</strong></div>';
     $('currentTitle').textContent='Žiadna skladba';
     $('currentArtist').textContent='Vyber skladbu zo zoznamu.';
+    updateStartDisplay(null);
     $('openYoutube').hidden=true;
     $('currentEdit').hidden=true;
     $('currentRemove').hidden=true;
@@ -1143,13 +1209,15 @@
     selectedId=songs.some(s=>s.id===oldSelected)?oldSelected:(songs[0]?.id||null);
     if(!selectedId) {clearPlayer();return;}
     const current=songs.find(s=>s.id===selectedId);
-    if(selectedId!==oldSelected || oldSong?.videoId!==current.videoId) {
+    if(selectedId!==oldSelected || oldSong?.videoId!==current.videoId ||
+       oldSong?.startSeconds!==current.startSeconds) {
       playSong(selectedId);
       return;
     }
     $('currentTitle').textContent=current.title;
     $('currentArtist').textContent=current.artist||'Bez uvedeného autora';
-    $('openYoutube').href=current.url;
+    $('openYoutube').href=playbackUrl(current);
+    updateStartDisplay(current);
     $('openYoutube').hidden=false;
     $('currentEdit').hidden=false;
     $('currentRemove').hidden=false;
