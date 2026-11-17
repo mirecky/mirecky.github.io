@@ -450,6 +450,8 @@
     if (!s || typeof s !== 'object' || typeof s.title !== 'string' || typeof s.url !== 'string') return null;
     const videoId = videoIdFromUrl(s.url);
     if (!videoId || !s.title.trim()) return null;
+    const isMoonlightScore = videoId==='wQuBfKikBq0' ||
+      (/(moonlight|mesačn)/i.test(s.title) && /beethoven/i.test(s.artist||''));
     return {
       id:typeof s.id === 'string' && /^[A-Za-z0-9_-]{1,100}$/.test(s.id) ? s.id : newId(),
       title:s.title.trim().slice(0,150),
@@ -460,9 +462,9 @@
       pinned:typeof s.pinned==='boolean' ? s.pinned : (videoId==='YdWK3qsDyXA'||videoId==='wQuBfKikBq0'),
       addedAt:Number.isSafeInteger(s.addedAt)&&s.addedAt>=0 ? s.addedAt : 0,
       notes:typeof s.notes === 'string' ? s.notes.trim().slice(0,500) : '',
-      scoreUrl:scoreLink(s.scoreUrl)||(videoId==='wQuBfKikBq0'?MOONLIGHT_SCORE:''),
+      scoreUrl:scoreLink(s.scoreUrl)||(isMoonlightScore?MOONLIGHT_SCORE:''),
       scorePreviewUrl:scoreLink(s.scorePreviewUrl)||(videoId==='YdWK3qsDyXA'?GODFATHER_PREVIEW:''),
-      scoreSource:(typeof s.scoreSource==='string'&&s.scoreSource.trim()?s.scoreSource.trim().slice(0,200):(videoId==='wQuBfKikBq0'?'Mutopia Project · CC BY-SA 2.5':videoId==='YdWK3qsDyXA'?'Score Exchange · náhľad prvej strany (celé noty platené)':''))
+      scoreSource:(typeof s.scoreSource==='string'&&s.scoreSource.trim()?s.scoreSource.trim().slice(0,200):(isMoonlightScore?'Mutopia Project · CC BY-SA 2.5':videoId==='YdWK3qsDyXA'?'Score Exchange · náhľad prvej strany (celé noty platené)':''))
     };
   }
   function newId() { return 'song-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,8); }
