@@ -260,6 +260,37 @@
       .viewer-actions {justify-content:flex-start;}
       .song-row {padding:7px 6px;}
     }
+
+    /* Pedagogický rozbor skladby: prehľad, nie prepis notového zápisu. */
+    .theory-panel {border-top:1px solid var(--line);margin-top:16px;padding-top:13px;}
+    .theory-panel > summary {cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:12px;list-style:none;font-size:16px;font-weight:750;padding:5px 0;}
+    .theory-panel > summary::-webkit-details-marker {display:none;}
+    .theory-panel > summary::after {content:"⌄";color:var(--gold);font-size:20px;line-height:1;}
+    .theory-panel[open] > summary::after {transform:rotate(180deg);}
+    .theory-badge {font-size:11px;font-weight:600;color:var(--gold);margin-left:auto;}
+    .theory-content {display:grid;gap:16px;padding-top:14px;}
+    .theory-step {border:1px solid #343949;border-radius:11px;padding:12px;background:#151b25;}
+    .theory-step h4 {font-size:13px;margin:0 0 6px;}
+    .theory-step p {font-size:12px;color:var(--muted);margin:0 0 10px;}
+    .theory-tones {display:flex;flex-wrap:wrap;gap:6px;}
+    .theory-tone {display:inline-flex;align-items:center;justify-content:center;border:1px solid #60513c;border-radius:8px;padding:7px 10px;font-size:13px;color:var(--gold);background:#26251f;min-width:36px;font-weight:750;}
+    .theory-chords {display:grid;grid-template-columns:repeat(auto-fit,minmax(92px,1fr));gap:7px;}
+    .theory-chord {text-align:left;color:var(--text);background:#222938;border:1px solid #465064;border-radius:9px;padding:9px 10px;cursor:pointer;}
+    .theory-chord:hover,.theory-chord:focus-visible {border-color:var(--gold);}
+    .theory-chord strong {display:block;font-size:13px;}
+    .theory-chord span {font-size:11px;color:var(--muted);}
+    .theory-chord[aria-pressed="true"] {border-color:var(--gold);background:#332a20;}
+    .theory-chosen {font-size:13px;color:var(--gold);padding-top:8px;min-height:22px;}
+    .theory-pill {display:inline-block;padding:5px 9px;border:1px solid #55516a;border-radius:7px;margin:0 3px 5px 0;font-size:12px;}
+    .theory-warning {font-size:12px;color:var(--muted);margin:0;}
+    .theory-guide {padding-left:19px;color:var(--muted);font-size:12px;margin:0;}
+    .theory-guide li {padding-bottom:5px;}
+    .theory-intro {padding:11px 12px;border:1px dashed #5d4f3e;border-radius:10px;background:#201d1a;}
+    .theory-intro strong {display:block;font-size:13px;margin-bottom:4px;}
+    .theory-intro p {font-size:12px;color:var(--muted);margin:0;}
+    .theory-empty {font-size:13px;color:var(--muted);}
+    .theory-summary-title {display:flex;align-items:center;gap:8px;}
+    .theory-summary-title svg {color:var(--gold);}
   </style>
 </head>
 <body>
@@ -353,6 +384,46 @@
           <p>Ak sa PDF v mobile nezobrazí, otvor ho samostatným tlačidlom. Náhľady vydavateľov sa otvárajú na ich stránkach.</p>
         </div>
       </section>
+      <details class="theory-panel" id="theoryPanel">
+        <summary><span>Hudobný rozbor · stupnica a akordy</span><span class="theory-badge" id="theoryBadge">Vyber skladbu</span></summary>
+        <div class="theory-content">
+          <div class="theory-intro">
+            <strong id="theoryKeyTitle">Tónina nie je určená</strong>
+            <p id="theoryIntroText">Po výbere tóniny sa automaticky vygenerujú stupnica a akordy.</p>
+          </div>
+          <div id="theoryUnknown" class="theory-empty" hidden>
+            Tónina aranžmánu zatiaľ nie je známa. Otvor „Upraviť“ a v časti „Hudobný rozbor“ ju nastav. Z názvu ani YouTube odkazu ju nemožno spoľahlivo zistiť.
+            <button id="theoryEdit" class="button small" type="button" style="margin-top:11px">Nastaviť tóninu</button>
+          </div>
+          <div id="theoryKnown" hidden>
+            <div class="theory-step">
+              <h4>1. Najprv stupnica</h4>
+              <p id="theoryScaleHint"></p>
+              <div class="theory-tones" id="theoryTones"></div>
+            </div>
+            <div class="theory-step" style="margin-top:11px">
+              <h4>2. Akordy, ktoré patria do tóniny</h4>
+              <p>Každý akord tvoria tri tóny. Kliknutím zobrazíš jeho zloženie. Nie všetky sa musia v skladbe použiť.</p>
+              <div class="theory-chords" id="theoryChords"></div>
+              <div id="theoryChosen" class="theory-chosen" aria-live="polite"></div>
+              <p id="theoryHarmonic" style="margin:8px 0 0" hidden></p>
+            </div>
+            <div class="theory-step" style="margin-top:11px">
+              <h4>3. Skutočný harmonický postup skladby</h4>
+              <div id="theoryActual"></div>
+            </div>
+            <div class="theory-step" style="margin-top:11px">
+              <h4>4. Od akordov k skladbe</h4>
+              <ol class="theory-guide">
+                <li>Zahraj stupnicu pomaly nahor a nadol.</li>
+                <li>Precvič tonický a dominantný akord, potom ďalšie akordy.</li>
+                <li>Zahraj akord naraz, potom jeho tóny postupne ako rozklad.</li>
+                <li>Porovnaj rozklady s notami a s konkrétnym videonávodom.</li>
+              </ol>
+            </div>
+          </div>
+        </div>
+      </details>
     </section>
   </div>
   <dialog class="action-dialog" id="ytDialog" aria-label="Vyhľadávanie na YouTube">
@@ -383,6 +454,15 @@
           <details class="advanced-fields" id="advancedFields">
             <summary>Noty a poznámky <span>(nepovinné)</span></summary>
             <div class="advanced-inner">
+              <div class="field"><label for="keyRoot">Základný tón (tónina skladby alebo aranžmánu)</label><select id="keyRoot">
+                <option value="">Neznáma / zatiaľ neurčená</option>
+                <option value="C">C</option><option value="C#">C♯ (cis)</option><option value="D">D</option>
+                <option value="Eb">E♭ (es)</option><option value="E">E</option><option value="F">F</option>
+                <option value="F#">F♯ (fis)</option><option value="G">G</option><option value="Ab">A♭ (as)</option>
+                <option value="A">A</option><option value="Bb">B♭ (bé)</option><option value="B">H / B</option>
+              </select></div>
+              <div class="field"><label for="keyMode">Druh stupnice</label><select id="keyMode"><option value="">Neurčená</option><option value="major">Dur</option><option value="minor">Mol</option></select><small>Vyber tóninu z notového zápisu alebo overeného rozboru. V inej úprave môže byť odlišná.</small></div>
+              <div class="field"><label for="analysisChords">Akordy skutočne použité v aranžmáne (voliteľné)</label><input id="analysisChords" maxlength="300" placeholder="Napr. C#m, A, D/F#, G#7"><small>Ak ich nepoznáme, necháme pole prázdne. Bežné akordy tóniny sa vytvoria automaticky.</small></div>
           <div class="field"><label for="scoreUrl">Kompletné noty zadarmo (odkaz)</label><input id="scoreUrl" type="url" maxlength="2048" placeholder="https://.../noty.pdf"><small>Len legálne dostupný kompletný notový zápis.</small></div>
           <div class="field"><label for="scorePreviewUrl">Náhľad nôt (odkaz)</label><input id="scorePreviewUrl" type="url" maxlength="2048" placeholder="https://.../preview"><small>Ak sú noty platené, ulož oficiálny náhľad vydavateľa.</small></div>
           <div class="field"><label for="scoreSourceInput">Zdroj / licencia</label><input id="scoreSourceInput" maxlength="200" placeholder="Mutopia · CC BY-SA, alebo Score Exchange · náhľad"></div>
@@ -416,6 +496,8 @@
     MOONLIGHT
   ];
   const statuses = {want:'Chcem hrať',learning:'Učím sa',learned:'Zvládnuté'};
+  const THEORY_ROOTS=['C','C#','D','Eb','E','F','F#','G','Ab','A','Bb','B'];
+
   const MAX_PINNED=3;
   const collator=new Intl.Collator('sk',{sensitivity:'base',numeric:true});
   const $ = id => document.getElementById(id);
@@ -452,6 +534,9 @@
     if (!videoId || !s.title.trim()) return null;
     const isMoonlightScore = videoId==='wQuBfKikBq0' ||
       (/(moonlight|mesačn)/i.test(s.title) && /beethoven/i.test(s.artist||''));
+    const keyRoot=(typeof s.keyRoot==='string' ? (THEORY_ROOTS.includes(s.keyRoot)?s.keyRoot:'') : (isMoonlightScore?'C#':''));
+    const keyMode=(typeof s.keyMode==='string' ? (['major','minor'].includes(s.keyMode)?s.keyMode:'') : (isMoonlightScore?'minor':''));
+
     return {
       id:typeof s.id === 'string' && /^[A-Za-z0-9_-]{1,100}$/.test(s.id) ? s.id : newId(),
       title:s.title.trim().slice(0,150),
@@ -461,6 +546,9 @@
       status:statuses[s.status] ? s.status : 'want',
       pinned:typeof s.pinned==='boolean' ? s.pinned : (videoId==='YdWK3qsDyXA'||videoId==='wQuBfKikBq0'),
       addedAt:Number.isSafeInteger(s.addedAt)&&s.addedAt>=0 ? s.addedAt : 0,
+      keyRoot, keyMode,
+      analysisChords:typeof s.analysisChords==='string'?s.analysisChords.trim().slice(0,300):'',
+
       notes:typeof s.notes === 'string' ? s.notes.trim().slice(0,500) : '',
       scoreUrl:scoreLink(s.scoreUrl)||(isMoonlightScore?MOONLIGHT_SCORE:''),
       scorePreviewUrl:scoreLink(s.scorePreviewUrl)||(videoId==='YdWK3qsDyXA'?GODFATHER_PREVIEW:''),
@@ -539,6 +627,7 @@
     $('currentEdit').hidden=false;
     $('currentRemove').hidden=false;
     renderScore(song);
+    renderTheory(song);
     renderList();
     if(userInitiated && matchMedia('(max-width:920px)').matches) {
       setMobileTab('player');
@@ -568,6 +657,143 @@
     $('scoreSource').textContent=song?.scoreSource?'Zdroj/licencia: '+song.scoreSource:'';
     $('scoreSearch').disabled=!song;
   }
+
+  // Hudobná teória: akordy vznikajú z tónov zvolenej stupnice.
+  // Tónina sa NEROZPOZNÁVA zo zvuku YouTube videa; to by bolo nespoľahlivé.
+  const NATURAL_PITCHES=[0,2,4,5,7,9,11];
+  const LETTERS=['C','D','E','F','G','A','B'];
+  const romanNumerals={
+    major:['I','ii','iii','IV','V','vi','vii°'],
+    minor:['i','ii°','III','iv','v','VI','VII']
+  };
+  let currentTheoryChords=[];
+  function normalizedPitch(num) {return (num%12+12)%12;}
+  function notePitch(name) {
+    const index=LETTERS.indexOf(name[0]);
+    if(index<0)return 0;
+    return normalizedPitch(NATURAL_PITCHES[index]+(name.slice(1).match(/#/g)||[]).length-(name.slice(1).match(/b/g)||[]).length);
+  }
+  function spelledScale(root,mode,harmonic=false) {
+    const intervals=mode==='major'?[0,2,4,5,7,9,11]:[0,2,3,5,7,8,harmonic?11:10];
+    const firstIndex=LETTERS.indexOf(root[0]);
+    const firstPitch=notePitch(root);
+    return intervals.map((interval,i)=>{
+      const letterIndex=(firstIndex+i)%7;
+      let diff=normalizedPitch(firstPitch+interval-NATURAL_PITCHES[letterIndex]);
+      if(diff>6) diff-=12;
+      const accidental=diff>0?'#'.repeat(diff):'b'.repeat(-diff);
+      return LETTERS[letterIndex]+accidental;
+    });
+  }
+  function unicodeNotes(value) {
+    return String(value).replace(/#/g,'♯').replace(/b/g,'♭');
+  }
+  function scaleTriads(notes,mode) {
+    return notes.map((root,index)=>{
+      const members=[notes[index],notes[(index+2)%7],notes[(index+4)%7]];
+      const base=notePitch(members[0]);
+      const third=normalizedPitch(notePitch(members[1])-base);
+      const fifth=normalizedPitch(notePitch(members[2])-base);
+      const quality=third===4&&fifth===7?'':third===3&&fifth===7?'m':third===3&&fifth===6?'dim':third===4&&fifth===8?'aug':'';
+      return {label:root+quality,roman:romanNumerals[mode][index],tones:members};
+    });
+  }
+  function renderTheory(song) {
+    const root=song?.keyRoot||'';
+    const mode=song?.keyMode||'';
+    const known=THEORY_ROOTS.includes(root)&&['major','minor'].includes(mode);
+    $('theoryKnown').hidden=!known;
+    $('theoryUnknown').hidden=known;
+    $('theoryBadge').textContent=known?unicodeNotes(root)+' '+(mode==='minor'?'mol':'dur'):'Tónina neurčená';
+    $('theoryKeyTitle').textContent=known?'Tónina: '+unicodeNotes(root)+' '+(mode==='minor'?'mol':'dur'):'Tónina nie je určená';
+    $('theoryIntroText').textContent=known?
+      'Stupnica a jej základné akordy sa počítajú automaticky. Skutočné akordy sa môžu líšiť podľa aranžmánu.':
+      'Najprv potrebujeme overiť tóninu konkrétneho aranžmánu.';
+    currentTheoryChords=[];
+    $('theoryTones').replaceChildren();
+    $('theoryChords').replaceChildren();
+    $('theoryChosen').textContent='';
+    $('theoryActual').replaceChildren();
+    if(!known)return;
+    const notes=spelledScale(root,mode);
+    for(const note of notes) {
+      const span=document.createElement('span');
+      span.className='theory-tone';
+      span.textContent=unicodeNotes(note);
+      $('theoryTones').append(span);
+    }
+    $('theoryScaleHint').textContent=mode==='minor'?
+      'Prirodzená molová stupnica. V skladbe sa môže 7. stupeň zvýšiť v harmonickej molovej.':
+      'Durová stupnica: sedem tónov vrátane základného.';
+    currentTheoryChords=scaleTriads(notes,mode);
+    for(let i=0;i<currentTheoryChords.length;i++){
+      const chord=currentTheoryChords[i];
+      const button=document.createElement('button');
+      button.type='button';button.className='theory-chord';
+      button.dataset.chordIndex=String(i);
+      button.setAttribute('aria-pressed','false');
+      const strong=document.createElement('strong');strong.textContent=unicodeNotes(chord.label);
+      const sub=document.createElement('span');sub.textContent=chord.roman;
+      button.append(strong,sub);
+      $('theoryChords').append(button);
+    }
+    if(mode==='minor'){
+      const raised=spelledScale(root,'minor',true);
+      const dominant=scaleTriads(raised,'minor')[4];
+      // Dominantný septakord = 5., 7., 2. a 4. tón harmonickej molovej stupnice.
+      const v7=[raised[4],raised[6],raised[1],raised[3]];
+      $('theoryHarmonic').hidden=false;
+      $('theoryHarmonic').textContent='Harmonická molová má zvýšený 7. stupeň ('+
+        unicodeNotes(raised[6])+'). Dominanta: '+unicodeNotes(dominant.label)+
+        ' alebo '+unicodeNotes(raised[4]+'7')+' ('+v7.map(unicodeNotes).join(' – ')+').';
+    }else{
+      $('theoryHarmonic').hidden=true;
+    }
+    let actual=song.analysisChords?.trim()||'';
+    let source='';
+    const isOriginalMoonlight=(/moonlight|mesačn/i.test(song.title)&&/beethoven/i.test(song.artist)) ||
+      song.videoId==='wQuBfKikBq0';
+    if(!actual && isOriginalMoonlight && root==='C#' && mode==='minor'){
+      actual='C#m, A, D/F#, G#7, C#m';
+      source='Úvod originálneho notového zápisu (orientačne takty 1–5); konkrétny videonávod môže byť upravený.';
+    } else if(actual) {
+      source='Akordy zadané pri skladbe. Over ich podľa konkrétneho videa alebo notového zápisu.';
+    }
+    const box=$('theoryActual');
+    if(actual){
+      const sequence=document.createElement('div');
+      actual.split(',').map(x=>x.trim()).filter(Boolean).forEach(item=>{
+        const span=document.createElement('span');span.className='theory-pill';span.textContent=unicodeNotes(item);sequence.append(span);
+      });
+      const p=document.createElement('p');p.className='theory-warning';p.textContent=source;
+      box.append(sequence,p);
+    } else {
+      const p=document.createElement('p');p.className='theory-warning';
+      p.textContent='Harmonický postup tohto aranžmánu zatiaľ nie je overený. Akordy z tóniny vyššie sú teoretické možnosti, nie automatický prepis skladby.';
+      box.append(p);
+    }
+  }
+  $('theoryChords').addEventListener('click',event=>{
+    const btn=event.target.closest('button[data-chord-index]');
+    if(!btn)return;
+    const index=Number(btn.dataset.chordIndex);
+    const chord=currentTheoryChords[index];
+    if(!chord)return;
+    for(const b of $('theoryChords').querySelectorAll('button')){
+      b.setAttribute('aria-pressed',String(b===btn));
+    }
+    $('theoryChosen').textContent='Akord '+unicodeNotes(chord.label)+': '+
+      chord.tones.map(unicodeNotes).join(' – ')+
+      '. Zahraj tóny spolu, potom postupne.';
+  });
+  $('theoryEdit').addEventListener('click',()=>{
+    if(selectedId){
+      editSong(selectedId);
+      $('advancedFields').open=true;
+      $('keyRoot').focus();
+    }
+  });
+
   function searchScore(song) {
     const q=song.title+' '+song.artist+' piano sheet music free score official preview';
     window.open('https://www.google.com/search?q='+encodeURIComponent(q),'_blank','noopener,noreferrer');
@@ -748,9 +974,11 @@
     editingId=id;
     $('title').value=song.title; $('artist').value=song.artist; $('url').value=song.url; $('status').value=song.status; $('notes').value=song.notes;
     $('scoreUrl').value=song.scoreUrl||''; $('scorePreviewUrl').value=song.scorePreviewUrl||''; $('scoreSourceInput').value=song.scoreSource||'';
+    $('keyRoot').value=song.keyRoot||''; $('keyMode').value=song.keyMode||''; $('analysisChords').value=song.analysisChords||'';
+
     $('formTitle').textContent='Upraviť skladbu';$('save').textContent='Uložiť zmeny';$('cancel').hidden=false;
     $('dialogTitle').textContent='Upraviť skladbu';
-    $('advancedFields').open=Boolean(song.scoreUrl||song.scorePreviewUrl||song.notes);
+    $('advancedFields').open=Boolean(song.scoreUrl||song.scorePreviewUrl||song.notes||song.keyRoot);
     showMessage('Upravuješ: '+song.title);
     $('addDialog').showModal();
   }
@@ -774,10 +1002,11 @@
   $('songForm').addEventListener('submit', async e=>{
     e.preventDefault();
     const previous=editingId?songs.find(x=>x.id===editingId):null;
-    const raw={title:$('title').value,artist:$('artist').value,url:$('url').value,status:$('status').value,notes:$('notes').value,scoreUrl:$('scoreUrl').value,scorePreviewUrl:$('scorePreviewUrl').value,scoreSource:$('scoreSourceInput').value,pinned:previous?.pinned??false,addedAt:previous?.addedAt??Date.now(),id:editingId||newId()};
+    const raw={title:$('title').value,artist:$('artist').value,url:$('url').value,status:$('status').value,notes:$('notes').value,scoreUrl:$('scoreUrl').value,scorePreviewUrl:$('scorePreviewUrl').value,scoreSource:$('scoreSourceInput').value,keyRoot:$('keyRoot').value,keyMode:$('keyMode').value,analysisChords:$('analysisChords').value,pinned:previous?.pinned??false,addedAt:previous?.addedAt??Date.now(),id:editingId||newId()};
     const s=cleanSong(raw);
     if(!s) {showMessage('Zadaj názov a platný odkaz na konkrétne YouTube video.');return;}
     if(songs.some(x=>x.videoId===s.videoId&&x.id!==editingId)) {showMessage('Toto video už v zozname máš.');return;}
+    if(Boolean(s.keyRoot)!==Boolean(s.keyMode)){showMessage('Pre hudobný rozbor vyber súčasne základný tón aj Dur/Mol.');return;}
     if(cloudMode !== 'local') {
       if(cloudMode !== 'online') {showMessage('Cloud ešte nie je pripravený.');return;}
       $('save').disabled=true;
@@ -792,7 +1021,7 @@
     }
     if(editingId) {const idx=songs.findIndex(x=>x.id===editingId);if(idx<0)return;songs[idx]=s;showMessage('Zmeny boli uložené.');}
     else {songs.push(s);showMessage('Skladba bola pridaná do zoznamu.');}
-    persist();resetForm();$('addDialog').close();if(selectedId===s.id)renderScore(s);renderList();
+    persist();resetForm();$('addDialog').close();if(selectedId===s.id){renderScore(s);renderTheory(s);}renderList();
   });
   function searchYoutube(query) {
     $('ytSearchQuery').value=query;
@@ -878,6 +1107,7 @@
     $('currentEdit').hidden=true;
     $('currentRemove').hidden=true;
     renderScore(null);
+    renderTheory(null);
     renderList();
   }
   function replaceSongs(next) {
@@ -900,6 +1130,7 @@
     if(oldSong?.scoreUrl!==current.scoreUrl ||
       oldSong?.scorePreviewUrl!==current.scorePreviewUrl ||
       oldSong?.scoreSource!==current.scoreSource) renderScore(current);
+    renderTheory(current);
     renderList();
   }
   window.repertoireApp = {
