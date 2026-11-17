@@ -227,20 +227,29 @@
     .section-heading h3 {font-size:14px;margin:0;letter-spacing:-.01em;}
     .section-heading span {font-size:11px;color:var(--muted);}
     .pinned-list {display:grid;gap:8px;}
-    .pinned-list .song {grid-template-columns:78px minmax(0,1fr);gap:10px;padding:10px;}
+    .pinned-list .song {position:relative;grid-template-columns:78px minmax(0,1fr);gap:10px;padding:10px 10px 10px 48px;}
     .pinned-list .song.active {border-color:var(--gold2);}
     .pinned-list .song .song-tools {margin-top:6px;gap:5px;align-items:center;}
     .pinned-list .song .song-tools .button {font-size:11px;}
     .pin-hint {font-size:12px;color:var(--muted);padding:14px;border:1px dashed var(--line);border-radius:10px;margin:0;}
-    .pin-order-tools {display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin-top:7px;}
-    .pin-order-grip {padding:5px 9px;border-radius:7px;border:1px dashed #746447;color:#f3d8a6;background:#312b26;cursor:grab;user-select:none;touch-action:none;font-size:12px;font-weight:650;}
+    /* Compact left-side reorder rail. Only the grip starts a desktop drag,
+       but the drag preview and the reordered element are the entire card. */
+    .pin-order-tools {position:absolute;top:50%;left:7px;transform:translateY(-50%);
+      display:flex;flex-direction:column;align-items:center;gap:5px;z-index:2;}
+    .pin-order-grip {display:flex;align-items:center;justify-content:center;
+      width:33px;height:41px;padding:0;border:1px solid #5d564b;border-radius:8px;
+      color:#e8bd78;background:#242732;cursor:grab;user-select:none;touch-action:none;
+      font-size:23px;font-weight:700;line-height:1;}
+    .pin-order-grip:hover {background:#373039;border-color:var(--gold);}
     .pin-order-grip:active {cursor:grabbing;}
-    .pin-order-arrow {background:#252b38;border:1px solid #4b5364;color:#f4f1e9;border-radius:7px;min-width:29px;min-height:27px;cursor:pointer;font-size:14px;}
-    .pin-order-arrow:disabled {opacity:.3;cursor:default;}
+    .pin-order-arrow {display:flex;justify-content:center;align-items:center;
+      background:transparent;border:1px solid #424959;color:#d4d6df;
+      border-radius:7px;width:30px;height:28px;padding:0;cursor:pointer;font-size:16px;}
+    .pin-order-arrow:hover:not(:disabled) {border-color:var(--gold);color:var(--gold);}
+    .pin-order-arrow:disabled {opacity:.22;cursor:default;}
     .pin-order-grip:focus-visible,.pin-order-arrow:focus-visible {outline:2px solid var(--gold);outline-offset:2px;}
     .pinned-list .song.dragging {opacity:.48;}
     .pinned-list .song.drag-target {outline:2px dashed var(--gold);outline-offset:2px;background:#2d2730;}
-    .pin-order-hint {font-size:11px;color:var(--muted);margin:-5px 0 9px;}
     .pin-order-grip.is-busy {opacity:.55;cursor:wait;}
     .library-heading {padding-top:13px;border-top:1px solid var(--line);}
     .sort-row {display:flex;align-items:center;justify-content:space-between;gap:9px;margin:4px 0 9px;}
@@ -1272,6 +1281,28 @@
     const [item]=moved.splice(from,1);
     moved.splice(to,0,item);
     const orderIds=moved.map(s=>s.id);
+    if(cloudMode!=='online'&&cloudMode!=='local'){
+      libraryMessage('Cloud sa ešte načítava. Poradie zatiaľ nemožno zmeniť.');
+      return;
+    }
+    // Move the actual bordered article immediately, rather than waiting for
+    // Firebase before anything moves. Other cards flow into their new places.
+    const container=$('pinnedList');
+    const cards=[...container.querySelectorAll('.song[data-song-id]')];
+    const previousPositions=new Map(cards.map(card=>[card.dataset.songId,card.getBoundingClientRect().top]));
+    const dragged=cards.find(card=>card.dataset.songId===sourceId);
+    const target=cards.find(card=>card.dataset.songId===targetId);
+    if(dragged&&target){
+      if(from>to)container.insertBefore(dragged,target);
+      else container.insertBefore(dragged,target.nextSibling);
+      container.querySelectorAll('.song[data-song-id]').forEach(card=>{
+        const delta=previousPositions.get(card.dataset.songId)-card.getBoundingClientRect().top;
+        if(Math.abs(delta)>1&&typeof card.animate==='function'){
+          card.animate([{transform:'translateY('+delta+'px)'},{transform:'translateY(0)'}],
+            {duration:180,easing:'ease-out'});
+        }
+      });
+    }
     if(cloudMode==='online'){
       savingPinnedOrder=true;
       try{
@@ -1281,10 +1312,6 @@
         libraryMessage('Poradie sa nepodarilo uložiť: '+error.message);
         renderList();
       }finally{savingPinnedOrder=false;}
-      return;
-    }
-    if(cloudMode!=='local'){
-      libraryMessage('Cloud sa ešte načítava. Poradie zatiaľ nemožno zmeniť.');
       return;
     }
     moved.forEach((song,index)=>{
@@ -1405,14 +1432,21 @@
     grip.tabIndex=0;
     grip.setAttribute('role','button');
     grip.setAttribute('aria-label','Presunúť skladbu '+song.title+' potiahnutím myšou alebo šípkami');
-    grip.textContent='⠿ Presunúť';
+    grip.textContent='⠿';
     grip.title='Chyť a presuň na miesto inej pripnutej skladby';
     grip.addEventListener('dragstart',event=>{
       if(savingPinnedOrder){event.preventDefault();return;}
       draggingPinnedId=song.id;
       event.dataTransfer.effectAllowed='move';
       event.dataTransfer.setData('text/plain',song.id);
-      card.classList.add('dragging');
+      // Use the *full article* as the browser's drag image, including its
+      // border, thumbnail, metadata and buttons, never the small grip alone.
+      const rect=card.getBoundingClientRect();
+      event.dataTransfer.setDragImage(card,
+        Math.max(0,Math.round(event.clientX-rect.left)),
+        Math.max(0,Math.round(event.clientY-rect.top)));
+      // Delay source fading so the drag snapshot captures the complete card.
+      requestAnimationFrame(()=>{if(draggingPinnedId===song.id)card.classList.add('dragging');});
     });
     grip.addEventListener('dragend',()=>{
       draggingPinnedId=null;card.classList.remove('dragging');
@@ -1434,9 +1468,9 @@
       control.addEventListener('click',()=>movePinnedByOffset(song.id,direction));
       return control;
     }
-    reordering.append(grip,shiftButton(-1,'Posunúť vyššie','↑'),shiftButton(1,'Posunúť nižšie','↓'));
-    content.append(title,artist,statusSelector(song),tools,reordering);
-    card.append(thumbnailButton,content);
+    reordering.append(shiftButton(-1,'Posunúť vyššie','↑'),grip,shiftButton(1,'Posunúť nižšie','↓'));
+    content.append(title,artist,statusSelector(song),tools);
+    card.append(reordering,thumbnailButton,content);
     return card;
   }
   function renderCompactRow(song) {
