@@ -819,10 +819,36 @@
     if(Number.isFinite(n)&&n>=0&&n<=86400)syncStartControls(n);
   });
   $('startSeconds').addEventListener('change',event=>syncStartControls(event.target.value));
+  // Infer difficulty from tutorial labels only, never from normal song titles.
+  function inferTitleVariant(value) {
+    const original=String(value||'').normalize('NFKC').trim().replace(/\s+/g,' ');
+    let label=original,detected='';
+    const patterns=[
+      /^\s*(easy|medium|profi)\s*(?:(?:piano|keyboard|tutorial|lesson|version)\s*)*[-–—:|]\s*/i,
+      /\s*[\[(]\s*(easy|medium|profi)(?:\s+(?:piano|keyboard|tutorial|lesson|cover|version|arrangement|level|synthesia))*\s*[\])]\s*/gi,
+      /\s*[-–—|:]\s*(easy|medium|profi)(?:\s+(?:piano|keyboard|tutorial|lesson|cover|version|arrangement|level|synthesia))*\s*$/i,
+      /\s+\b(EASY|MEDIUM|PROFI)\b(?:\s+(?:piano|keyboard|tutorial|lesson|cover|version|arrangement|level|synthesia))*\s*$/,
+      /\s+(easy|medium|profi)\s+(?:piano|keyboard|tutorial|lesson|cover|version|arrangement|level|synthesia)(?:\s+(?:piano|keyboard|tutorial|lesson|cover|version|arrangement|level|synthesia))*\s*$/i
+    ];
+    for(const pattern of patterns){
+      label=label.replace(pattern,(whole,level)=>{
+        if(!detected)detected=level.toLowerCase();
+        return ' ';
+      }).trim();
+    }
+    if(detected&&label){
+      label=label.replace(/\s*[\[(](?:piano tutorial|tutorial|piano cover|synthesia)[\])]\s*$/i,'')
+        .replace(/\s*[-–—|:]\s*(?:piano tutorial|tutorial|piano cover|synthesia)\s*$/i,'')
+        .trim().replace(/\s+/g,' ');
+    }
+    return {difficulty:label?detected:'',workGroup:label||original};
+  }
   function cleanSong(s) {
     if (!s || typeof s !== 'object' || typeof s.title !== 'string' || typeof s.url !== 'string') return null;
     const videoId = videoIdFromUrl(s.url);
     if (!videoId || !s.title.trim()) return null;
+    const parsedTitle=inferTitleVariant(s.title);
+    const parsedGroup=inferTitleVariant(s.workGroup||s.title);
     const isMoonlightScore = videoId==='wQuBfKikBq0' ||
       (/(moonlight|mesačn)/i.test(s.title) && /beethoven/i.test(s.artist||''));
     const keyRoot=(typeof s.keyRoot==='string' ? (THEORY_ROOTS.includes(s.keyRoot)?s.keyRoot:'') : (isMoonlightScore?'C#':''));
@@ -864,9 +890,10 @@
       id:typeof s.id === 'string' && /^[A-Za-z0-9_-]{1,100}$/.test(s.id) ? s.id : newId(),
       title:s.title.trim().slice(0,150),
       artist:typeof s.artist === 'string' ? s.artist.trim().slice(0,120) : '',
-      difficulty:Object.hasOwn(DIFFICULTIES,s.difficulty)?s.difficulty:'',
-      workGroup:typeof s.workGroup==='string'&&s.workGroup.trim()
-        ?s.workGroup.trim().slice(0,150):s.title.trim().slice(0,150),
+      difficulty:Object.hasOwn(DIFFICULTIES,s.difficulty)&&s.difficulty
+        ?s.difficulty:parsedTitle.difficulty||parsedGroup.difficulty||'',
+      // Previously saved workGroup sometimes contained EASY or MEDIUM.
+      workGroup:parsedGroup.workGroup.slice(0,150),
       url:'https://www.youtube.com/watch?v=' + videoId,
       videoId,
       status:statuses[s.status] ? s.status : 'want',
@@ -1273,21 +1300,23 @@
     showMessage(message);
   }
   function workKey(song) {
-    const label=String(song?.workGroup||song?.title||'');
+    const label=inferTitleVariant(song?.workGroup||song?.title||'').workGroup;
     return label.normalize('NFKC').trim().replace(/\s+/g,' ').toLocaleLowerCase('sk');
   }
   function groupedSongs(items=songs) {
     const groups=new Map();
     for(const song of items){
       const key=workKey(song);
-      if(!groups.has(key))groups.set(key,{key,label:song.workGroup||song.title,versions:[]});
+      if(!groups.has(key))groups.set(key,{
+        key,label:inferTitleVariant(song.workGroup||song.title).workGroup,versions:[]
+      });
       groups.get(key).versions.push(song);
     }
     return [...groups.values()];
   }
   function groupFor(song){
     return groupedSongs().find(g=>g.key===workKey(song)) ||
-      {key:workKey(song),label:song.workGroup||song.title,versions:[song]};
+      {key:workKey(song),label:inferTitleVariant(song.workGroup||song.title).workGroup,versions:[song]};
   }
   function pickVariant(group){
     const preferred=variantPrefs.get(group.key);
@@ -1368,6 +1397,8 @@
     $('title').value=group.label;
     $('artist').value=song.artist;
     $('workGroup').value=group.label;
+    autoGroupSuggestion=group.label;
+    groupEditedManually=true;
     $('difficulty').value='';
     $('status').value='want';
     $('dialogTitle').textContent='Pridať inú náročnosť – '+group.label;
@@ -1669,6 +1700,27 @@
       list.append(p);
     }
   }
+  let autoGroupSuggestion='';
+  let groupEditedManually=false;
+  let levelEditedManually=false;
+  function autoFillDifficultyFromTitle(titleText){
+    if(!$('addDialog').open)return;
+    const info=inferTitleVariant(titleText);
+    if(info.difficulty&&!levelEditedManually)$('difficulty').value=info.difficulty;
+    if(!groupEditedManually && info.workGroup && (!$('workGroup').value.trim()||
+       $('workGroup').value.trim()===autoGroupSuggestion)){
+      $('workGroup').value=info.workGroup;
+      autoGroupSuggestion=info.workGroup;
+    }
+  }
+  $('title').addEventListener('input',()=>autoFillDifficultyFromTitle($('title').value));
+  $('difficulty').addEventListener('change',()=>{levelEditedManually=true;});
+  $('workGroup').addEventListener('input',()=>{groupEditedManually=true;});
+  document.addEventListener('klavir:video-metadata',event=>{
+    if(!$('addDialog').open)return;
+    if(videoIdFromUrl($('url').value)!==event.detail?.videoId)return;
+    autoFillDifficultyFromTitle(event.detail.title);
+  });
   function editSong(id) {
     const song=songs.find(s=>s.id===id);if(!song)return;
     refreshWorkGroupOptions();
@@ -1676,6 +1728,9 @@
     $('title').value=song.title; $('artist').value=song.artist; $('url').value=song.url; $('status').value=song.status; $('notes').value=song.notes;
     $('difficulty').value=song.difficulty||'';
     $('workGroup').value=song.workGroup||song.title;
+    autoGroupSuggestion=$('workGroup').value;
+    groupEditedManually=true;
+    levelEditedManually=Boolean(song.difficulty);
     $('scoreUrl').value=song.scoreUrl||''; $('scorePreviewUrl').value=song.scorePreviewUrl||''; $('scoreSourceInput').value=song.scoreSource||'';
     $('originType').value=song.originType||'';
     $('originWork').value=song.originWork||'';
@@ -1693,6 +1748,9 @@
     document.dispatchEvent(new CustomEvent('klavir:editor-open',{detail:{videoId:song.videoId}}));
   }
   function resetForm() {
+    autoGroupSuggestion='';
+    groupEditedManually=false;
+    levelEditedManually=false;
     editingId=null;$('songForm').reset();syncStartControls(0);$('formTitle').textContent='Pridať skladbu';$('dialogTitle').textContent='Pridať skladbu';$('save').textContent='Pridať do zoznamu';$('cancel').hidden=true;$('advancedFields').open=false;
   }
   async function removeSong(id) {
@@ -1715,6 +1773,8 @@
     const raw={title:$('title').value,artist:$('artist').value,url:$('url').value,status:$('status').value,difficulty:$('difficulty').value,workGroup:$('workGroup').value,startSeconds:$('startSeconds').value,pinnedOrder:previous?.pinnedOrder??null,sheetAnalysis:previous?.sheetAnalysis||null,musicXmlAnalysis:previous?.musicXmlAnalysis||null,analysisSource:previous?.analysisChords===$('analysisChords').value.trim()&&previous?.videoId===videoIdFromUrl($('url').value)?previous?.analysisSource:'',analysisModel:previous?.analysisChords===$('analysisChords').value.trim()&&previous?.videoId===videoIdFromUrl($('url').value)?previous?.analysisModel:'',analysisFallbackCode:previous?.analysisChords===$('analysisChords').value.trim()&&previous?.videoId===videoIdFromUrl($('url').value)?previous?.analysisFallbackCode:0,analysisFallbackReason:previous?.analysisChords===$('analysisChords').value.trim()&&previous?.videoId===videoIdFromUrl($('url').value)?previous?.analysisFallbackReason:'',notes:$('notes').value,originType:$('originType').value,originWork:$('originWork').value,originYear:$('originYear').value,originStory:$('originStory').value,originSource:$('originSource').value,scoreUrl:$('scoreUrl').value,scorePreviewUrl:$('scorePreviewUrl').value,scoreSource:$('scoreSourceInput').value,keyRoot:$('keyRoot').value,keyMode:$('keyMode').value,analysisChords:$('analysisChords').value,pinned:previous?.pinned??false,addedAt:previous?.addedAt??Date.now(),id:editingId||newId()};
     const s=cleanSong(raw);
     if(!s) {showMessage('Zadaj názov a platný odkaz na konkrétne YouTube video.');return;}
+    $('difficulty').value=s.difficulty;
+    $('workGroup').value=s.workGroup;
     if(songs.some(x=>x.videoId===s.videoId&&x.id!==editingId)) {showMessage('Toto video už v zozname máš.');return;}
     if(s.difficulty && songs.some(x=>x.id!==s.id&&workKey(x)===workKey(s)&&x.difficulty===s.difficulty)){
       showMessage('Táto skladba už má verziu '+DIFFICULTIES[s.difficulty]+'. Vyber inú náročnosť alebo uprav existujúce video.');return;
