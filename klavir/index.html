@@ -332,6 +332,21 @@
     .theory-sheet-proposal-actions {display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;}
     .theory-sheet-saved {padding:12px;background:#1b2724;border:1px solid #3b6050;border-radius:10px;}
     .theory-sheet-saved p {font-size:12px;line-height:1.55;color:var(--muted);margin:6px 0;}
+    .theory-musicxml-panel {border:1px solid #40566b;border-radius:11px;padding:12px;background:#18212b;}
+    .theory-musicxml-panel p {font-size:12px;line-height:1.55;color:var(--muted);margin:7px 0;}
+    #theoryMusicXmlTools {margin-top:12px;padding-top:12px;border-top:1px solid #344657;}
+    #theoryMusicXmlTools a {display:inline-flex;margin:6px 8px 6px 0;}
+    #theoryMusicXmlTools label {display:block;font-size:12px;font-weight:700;margin-top:12px;margin-bottom:6px;}
+    #theoryMusicXmlFile {max-width:100%;font-size:12px;}
+    #theoryMusicXmlRun {margin:10px 0 8px;}
+    #theoryMusicXmlStatus {font-size:12px;line-height:1.5;overflow-wrap:anywhere;}
+    #theoryMusicXmlStatus[data-state="error"] {color:#ff9393;}
+    #theoryMusicXmlStatus[data-state="saved"] {color:#b8f2c4;}
+    #theoryMusicXmlStatus[data-state="warn"] {color:var(--gold);}
+    .theory-musicxml-result {padding:12px;background:#161d25;border:1px solid #40516a;border-radius:10px;margin:12px 0;}
+    .theory-musicxml-actions {display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;}
+    .theory-musicxml-saved {padding:12px;background:#1b2724;border:1px solid #3b6050;border-radius:10px;}
+    .theory-musicxml-saved p {font-size:12px;line-height:1.55;color:var(--muted);margin:6px 0;}
   </style>
 </head>
 <body>
@@ -475,6 +490,32 @@
                 </div>
               </div>
             </div>
+          </div>
+          <div class="theory-musicxml-panel">
+            <button id="theoryMusicXmlToggle" type="button" class="button small">♫ Importovať MusicXML – bez Gemini</button>
+            <p>MusicXML obsahuje zapísané tóny. Orientačný rozbor sa vypočíta priamo v prehliadači bez spotreby kvóty Gemini.</p>
+            <div id="theoryMusicXmlTools" hidden>
+              <a id="theoryMusicXmlMoonlight" class="button small" href="https://musetrainer.github.io/library/scores/Sonate_No._14_Moonlight_1st_Movement.mxl" target="_blank" rel="noopener noreferrer" hidden>Stiahnuť bezplatné MusicXML – Moonlight Sonata ↗</a>
+              <a id="theoryMusicXmlSearch" class="button small" href="https://musescore.com/" target="_blank" rel="noopener noreferrer">Hľadať noty na MuseScore ↗</a>
+              <p>Na MuseScore vyber zápis s povoleným stiahnutím; nevyužívame neoficiálne API ani automatické sťahovanie platených nôt.</p>
+              <label for="theoryMusicXmlFile">Vyber stiahnutý súbor MusicXML (.mxl, .musicxml, .xml)</label>
+              <input id="theoryMusicXmlFile" type="file" accept=".mxl,.musicxml,.xml,application/vnd.recordare.musicxml,application/vnd.recordare.musicxml+xml,application/xml,text/xml" aria-describedby="theoryMusicXmlLimit">
+              <p id="theoryMusicXmlLimit">Maximálne 12 MB. Súbor sa načíta lokálne, neodošle sa do Firebase ani Gemini.</p>
+              <button id="theoryMusicXmlRun" class="button primary small" type="button">Vypočítať akordy z MusicXML</button>
+              <p id="theoryMusicXmlStatus" role="status" aria-live="polite"></p>
+              <div id="theoryMusicXmlResult" class="theory-musicxml-result" hidden>
+                <div id="theoryMusicXmlInfo"></div>
+                <div class="theory-musicxml-actions">
+                  <button id="theoryMusicXmlSave" class="button primary small" type="button">Potvrdiť a uložiť odhad</button>
+                  <button id="theoryMusicXmlDiscard" class="button small" type="button">Zahodiť návrh</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div id="theoryMusicXmlSaved" class="theory-musicxml-saved" hidden>
+            <strong>Uložený odhad z MusicXML</strong>
+            <p id="theoryMusicXmlSavedInfo"></p>
+            <p id="theoryMusicXmlSavedCompare"></p>
           </div>
           <div id="theorySheetSaved" class="theory-sheet-saved" hidden>
             <strong>Uložený rozbor podľa nôt</strong>
@@ -689,6 +730,20 @@
       comment:typeof rawSheet.comment==='string'?rawSheet.comment.slice(0,250):'',
       analyzedAt:Number.isSafeInteger(rawSheet.analyzedAt)?rawSheet.analyzedAt:0
     } : null;
+    const rawXml=s.musicXmlAnalysis && typeof s.musicXmlAnalysis==='object' && !Array.isArray(s.musicXmlAnalysis)
+      ? s.musicXmlAnalysis : null;
+    const musicXmlAnalysis=rawXml && typeof rawXml.chords==='string' && rawXml.chords.trim() ? {
+      chords:rawXml.chords.trim().slice(0,400),
+      keyRoot:THEORY_ROOTS.includes(rawXml.keyRoot)?rawXml.keyRoot:'',
+      keyMode:['major','minor'].includes(rawXml.keyMode)?rawXml.keyMode:'',
+      keyDescription:typeof rawXml.keyDescription==='string'?rawXml.keyDescription.trim().slice(0,150):'',
+      measures:Number.isSafeInteger(rawXml.measures)?Math.max(0,rawXml.measures):0,
+      identified:Number.isSafeInteger(rawXml.identified)?Math.max(0,rawXml.identified):0,
+      sourceName:typeof rawXml.sourceName==='string'?rawXml.sourceName.trim().slice(0,120):'',
+      comparedVideoId:validId(rawXml.comparedVideoId)?rawXml.comparedVideoId:'',
+      method:rawXml.method==='measure-pitchclass-heuristic-v1'?rawXml.method:'',
+      analyzedAt:Number.isSafeInteger(rawXml.analyzedAt)?rawXml.analyzedAt:0
+    } : null;
 
     return {
       id:typeof s.id === 'string' && /^[A-Za-z0-9_-]{1,100}$/.test(s.id) ? s.id : newId(),
@@ -707,6 +762,7 @@
       analysisFallbackCode:[500,503].includes(Number(s.analysisFallbackCode))?Number(s.analysisFallbackCode):0,
       analysisFallbackReason:typeof s.analysisFallbackReason==='string'?s.analysisFallbackReason.trim().slice(0,140):'',
       sheetAnalysis,
+      musicXmlAnalysis,
 
       notes:typeof s.notes === 'string' ? s.notes.trim().slice(0,500) : '',
       scoreUrl:scoreLink(s.scoreUrl)||(isMoonlightScore?MOONLIGHT_SCORE:''),
@@ -885,8 +941,31 @@
     if(saved.sourceType==='linked'&&saved.sourceUrl!==song.scoreUrl)comparison+=' Pozor: zmenil sa odkaz na PDF.';
     $('theorySheetSavedCompare').textContent=comparison+' Ide o odhad AI, nie nezávisle overený prepis nôt.';
   }
+  function renderSavedMusicXml(song) {
+    const info=song?.musicXmlAnalysis;
+    const box=$('theoryMusicXmlSaved');
+    box.hidden=!info;
+    if(!info)return;
+    $('theoryMusicXmlSavedInfo').textContent=
+      'Akordy (orientačný výpočet): '+info.chords.replace(/#/g,'♯')+
+      (info.keyRoot?' · '+info.keyRoot.replace(/#/g,'♯')+' '+(info.keyMode==='minor'?'mol':'dur'):' · Tónina neurčená')+
+      ' · '+info.identified+'/'+info.measures+' taktov · súbor: '+info.sourceName+'.';
+    const paper=info.chords.split(',').map(x=>x.trim()).filter(Boolean);
+    const video=(song.analysisChords||'').split(',').map(x=>x.trim()).filter(Boolean);
+    const norm=x=>x.toLowerCase().replace(/\s/g,'').replace(/♯/g,'#').replace(/♭/g,'b');
+    const videoSet=new Set(video.map(norm));
+    const paperSet=new Set(paper.map(norm));
+    let text=video.length
+      ? 'Zhody s AI rozborom videa: '+(paper.filter(x=>videoSet.has(norm(x))).join(', ')||'žiadne jednoznačné')+
+        ' · Iba v MusicXML: '+(paper.filter(x=>!videoSet.has(norm(x))).join(', ')||'žiadne')+
+        ' · Iba vo videu: '+(video.filter(x=>!paperSet.has(norm(x))).join(', ')||'žiadne')+'.'
+      : 'Rozbor videa zatiaľ nie je uložený.';
+    if(info.comparedVideoId!==song.videoId)text+=' Video sa od analýzy zmenilo.';
+    $('theoryMusicXmlSavedCompare').textContent=text+' Ide o automatický odhad podľa taktov, nie overený harmonický rozbor.';
+  }
   function renderTheory(song) {
     renderSavedSheetAnalysis(song);
+    renderSavedMusicXml(song);
     const root=song?.keyRoot||'';
     const mode=song?.keyMode||'';
     const known=THEORY_ROOTS.includes(root)&&['major','minor'].includes(mode);
@@ -1221,7 +1300,7 @@
   $('songForm').addEventListener('submit', async e=>{
     e.preventDefault();
     const previous=editingId?songs.find(x=>x.id===editingId):null;
-    const raw={title:$('title').value,artist:$('artist').value,url:$('url').value,status:$('status').value,startSeconds:$('startSeconds').value,sheetAnalysis:previous?.sheetAnalysis||null,analysisSource:previous?.analysisChords===$('analysisChords').value.trim()&&previous?.videoId===videoIdFromUrl($('url').value)?previous?.analysisSource:'',analysisModel:previous?.analysisChords===$('analysisChords').value.trim()&&previous?.videoId===videoIdFromUrl($('url').value)?previous?.analysisModel:'',analysisFallbackCode:previous?.analysisChords===$('analysisChords').value.trim()&&previous?.videoId===videoIdFromUrl($('url').value)?previous?.analysisFallbackCode:0,analysisFallbackReason:previous?.analysisChords===$('analysisChords').value.trim()&&previous?.videoId===videoIdFromUrl($('url').value)?previous?.analysisFallbackReason:'',notes:$('notes').value,scoreUrl:$('scoreUrl').value,scorePreviewUrl:$('scorePreviewUrl').value,scoreSource:$('scoreSourceInput').value,keyRoot:$('keyRoot').value,keyMode:$('keyMode').value,analysisChords:$('analysisChords').value,pinned:previous?.pinned??false,addedAt:previous?.addedAt??Date.now(),id:editingId||newId()};
+    const raw={title:$('title').value,artist:$('artist').value,url:$('url').value,status:$('status').value,startSeconds:$('startSeconds').value,sheetAnalysis:previous?.sheetAnalysis||null,musicXmlAnalysis:previous?.musicXmlAnalysis||null,analysisSource:previous?.analysisChords===$('analysisChords').value.trim()&&previous?.videoId===videoIdFromUrl($('url').value)?previous?.analysisSource:'',analysisModel:previous?.analysisChords===$('analysisChords').value.trim()&&previous?.videoId===videoIdFromUrl($('url').value)?previous?.analysisModel:'',analysisFallbackCode:previous?.analysisChords===$('analysisChords').value.trim()&&previous?.videoId===videoIdFromUrl($('url').value)?previous?.analysisFallbackCode:0,analysisFallbackReason:previous?.analysisChords===$('analysisChords').value.trim()&&previous?.videoId===videoIdFromUrl($('url').value)?previous?.analysisFallbackReason:'',notes:$('notes').value,scoreUrl:$('scoreUrl').value,scorePreviewUrl:$('scorePreviewUrl').value,scoreSource:$('scoreSourceInput').value,keyRoot:$('keyRoot').value,keyMode:$('keyMode').value,analysisChords:$('analysisChords').value,pinned:previous?.pinned??false,addedAt:previous?.addedAt??Date.now(),id:editingId||newId()};
     const s=cleanSong(raw);
     if(!s) {showMessage('Zadaj názov a platný odkaz na konkrétne YouTube video.');return;}
     if(songs.some(x=>x.videoId===s.videoId&&x.id!==editingId)) {showMessage('Toto video už v zozname máš.');return;}
@@ -1386,6 +1465,14 @@
       const song=songs.find(s=>s.id===selectedId);
       return song?{...song}:null;
     },
+    async saveMusicXmlAnalysis(proposal) {
+      if(cloudMode!=='online')throw Error('Cloud nie je pripravený.');
+      const song=songs.find(s=>s.id===proposal.id);
+      if(!song||song.videoId!==proposal.videoId)throw Error('Skladba alebo video sa zmenilo.');
+      const next=cleanSong({...song,musicXmlAnalysis:proposal.analysis});
+      if(!next?.musicXmlAnalysis)throw Error('Nie je čo uložiť z MusicXML.');
+      await window.cloudSync.save(next);
+    },
     async saveSheetAnalysis(proposal) {
       if(cloudMode!=='online')throw Error('Cloud nie je pripravený.');
       const song=songs.find(s=>s.id===proposal.id);
@@ -1425,5 +1512,6 @@
 <script type="module" src="./cloud-sync.js?v=3"></script>
 <script type="module" src="./ai-chords.js?v=4"></script>
 <script type="module" src="./sheet-verify.js?v=1"></script>
+<script src="./musicxml-analyzer.js?v=1" defer></script>
 </body>
 </html>
