@@ -1558,6 +1558,25 @@
     if(matchMedia('(max-width:920px)').matches) setMobileTab('player');
     requestAnimationFrame(()=>$('scorePanel').scrollIntoView({behavior:'smooth',block:'start'}));
   }
+  // Menu správanie: outside-click, Esc, and at most one open context menu.
+  // Event delegation survives pinned-card re-rendering after cloud updates.
+  function closeSongMenus(except=null){
+    document.querySelectorAll('details.song-more[open]').forEach(menu=>{
+      if(menu!==except)menu.open=false;
+    });
+  }
+  document.addEventListener('pointerdown',event=>{
+    const menu=event.target?.closest?.('details.song-more');
+    closeSongMenus(menu||null);
+  },true);
+  document.addEventListener('keydown',event=>{
+    if(event.key!=='Escape')return;
+    const opened=document.querySelector('details.song-more[open]');
+    if(!opened)return;
+    const focusInside=opened.contains(document.activeElement);
+    closeSongMenus();
+    if(focusInside)opened.querySelector('summary')?.focus();
+  });
   function renderPinnedCard(anchor) {
     const group=groupFor(anchor);
     const song=pickVariant(group);
@@ -1596,6 +1615,7 @@
     const artist=document.createElement('p');artist.className='song-author';artist.textContent=song.artist||'Bez uvedeného autora';
     const tools=document.createElement('div');tools.className='song-tools';
     const more=document.createElement('details');more.className='song-more';
+    more.addEventListener('toggle',()=>{if(more.open)closeSongMenus(more);});
     const summary=document.createElement('summary');summary.textContent='⋯';
     summary.setAttribute('aria-label','Ďalšie možnosti pre '+song.title);
     const menu=document.createElement('div');menu.className='song-menu';
@@ -1605,6 +1625,10 @@
       makeButton('Upraviť',()=>editSong(song.id)),
       makeButton('Odstrániť',()=>removeSong(song.id),'danger')
     );
+    // Menu actions should also dismiss the dropdown.
+    menu.addEventListener('click',event=>{
+      if(event.target.closest('button'))more.open=false;
+    });
     more.append(summary,menu);
     tools.append(
       makeButton('▶ Prehrať',()=>playSong(song.id,true),'primary'),
